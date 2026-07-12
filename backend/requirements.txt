@@ -1,0 +1,11 @@
+fastapi[all]
+sqlmodel
+psycopg2-binary
+langgraph
+langchain-openai
+langchain-core
+langchain-tavily
+openai
+cloudinary
+python-dotenv
+pydantic-settings

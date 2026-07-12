@@ -4,6 +4,8 @@ import operator
 from langgraph.types import Send
 
 from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
@@ -18,9 +20,36 @@ import os
 
 os.environ["TAVILY_API_KEY"] = settings.TAVILY_API_KEY
 
-# Initialize LLM using our config API key
-llm = ChatOpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY)
+def get_llm(state: dict):
+    model_name = state.get("model_name", "GPT-4o").lower()
+    
+    if "claude" in model_name:
+        return ChatAnthropic(model="claude-sonnet-5", api_key=settings.ANTHROPIC_API_KEY)
+    elif "gemini" in model_name:
+        return ChatGoogleGenerativeAI(model="gemini-1.5-pro", api_key=settings.GOOGLE_API_KEY)
+    else:
+        return ChatOpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY)
 
+def extract_usage(raw, node_name: str, model_name: str):
+    usage = getattr(raw, "usage_metadata", None)
+    if not usage and hasattr(raw, "response_metadata"):
+        # fallback for some older LLM returns
+        token_usage = raw.response_metadata.get("token_usage", {})
+        usage = {
+            "input_tokens": token_usage.get("prompt_tokens", 0),
+            "output_tokens": token_usage.get("completion_tokens", 0),
+            "total_tokens": token_usage.get("total_tokens", 0)
+        }
+    if not usage:
+        usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+        
+    return {
+        "node": node_name,
+        "model_name": model_name,
+        "input_tokens": usage.get("input_tokens", 0),
+        "output_tokens": usage.get("output_tokens", 0),
+        "total_tokens": usage.get("total_tokens", 0)
+    }
 
 # ------------------------------------------------------------
 # Pydantic Schemas for LangGraph State and structured output
@@ -64,8 +93,13 @@ class Plan(BaseModel):
         "tutorial",
         "news_roundup",
         "comparison",
-        "system_design"
-    ] = "explainer"
+        "system_design",
+        "listicle",
+        "lifestyle",
+        "opinion",
+        "review",
+        "general"
+    ] = "general"
     constraints: List[str] = Field(default_factory=list)
     tasks: List[Task]
 
@@ -94,8 +128,8 @@ class ImageSpec(BaseModel):
     alt: str
     caption: str
     prompt: str = Field(..., description="Prompt to send to image model")
-    size: Literal["1024x1024", "1024x1536", "1536x1024"] = "1024x1024"
-    quality: Literal["low", "medium", "high"] = "medium"
+    size: Literal["1536x1024"] = "1536x1024"
+    quality: Literal["low", "medium"] = "medium"
     placeholder: Optional[str] = None # Set programmatically
 
 
@@ -105,6 +139,8 @@ class GlobalImagePlan(BaseModel):
 
 class BlogState(TypedDict):
     topic: str
+    model_name: str
+    length: str
     
     # routing and research
     mode: str
@@ -128,12 +164,15 @@ class BlogState(TypedDict):
 
     # Final generated blog
     final_blog: str
+    
+    # Metrics
+    metrics: Annotated[List[dict], operator.add]
 
 
 # -------------------------------------------------------------------
 # Router Node:
 # -------------------------------------------------------------------
-ROUTER_SYSTEM_PROMPT = """You are a routing module for a technical blog planner.
+ROUTER_SYSTEM_PROMPT = """You are a highly intelligent routing module for a versatile blog planner.
 
 Decide whether web research is needed BEFORE planning.
 
@@ -155,8 +194,11 @@ If needs_research=true:
 def router_node(state: BlogState):
     topic = state["topic"]
     as_of = state.get("as_of", date.today().isoformat())
-    decider_llm = llm.with_structured_output(RouterDecision)
-    decision = decider_llm.invoke(
+    model_name = state.get("model_name", "GPT-4o")
+    llm = get_llm(state)
+    decider_llm = llm.with_structured_output(RouterDecision, include_raw=True)
+    
+    response = decider_llm.invoke(
         [
             SystemMessage(content=ROUTER_SYSTEM_PROMPT),
             HumanMessage(
@@ -167,6 +209,9 @@ def router_node(state: BlogState):
             )
         ]
     )
+    
+    decision = response["parsed"]
+    metrics_log = extract_usage(response["raw"], "Router Node", model_name)
 
     # Set default recency window based on mode
     if decision.mode == "open_book":
@@ -174,13 +219,14 @@ def router_node(state: BlogState):
     elif decision.mode == "hybrid":
         recency_days = 45
     else:
-        recency_days = 3650
-
+        recency_days = 365
+        
     return {
-        "need_research": decision.need_research,
         "mode": decision.mode,
+        "need_research": decision.need_research,
         "queries": decision.queries,
         "recency_days": recency_days,
+        "metrics": [metrics_log]
     }
 
 
@@ -231,6 +277,7 @@ If missing or unclear, set published_at=null. Do NOT guess.
 def research_node(state: BlogState) -> dict:
     queries = (state.get("queries", []) or [])
     max_results = 6
+    llm = get_llm(state)
 
     raw_results: List[dict] = []
     for q in queries:
@@ -259,73 +306,71 @@ def research_node(state: BlogState) -> dict:
 # ---------------------------------------------------------------------
 # Orchestrator Node
 # ---------------------------------------------------------------------
-PLANNER_SYSTEM_PROMPT = """You are a senior technical writer and developer advocate.
-Your job is to produce a highly actionable outline for a technical blog post.
+PLANNER_SYSTEM_PROMPT = """You are an expert orchestrator and blog planner.
+Your job is to produce a highly actionable outline for a blog post based on the requested Target Length.
+
+Target Length Guidelines:
+- "Short (~500 words)": Create exactly 3-4 sections (tasks). Keep goals very concise.
+- "Medium (~1000 words)": Create exactly 5-6 sections (tasks).
+- "Long (~2000 words)": Create exactly 7-10 sections (tasks).
 
 Hard requirements:
-- Create 5–9 sections (tasks) suitable for the topic and audience.
 - Each task must include:
   1) goal (1 sentence)
   2) 3–6 bullets that are concrete, specific, and non-overlapping
-  3) target word count (120-550)
+  3) target word count (calculate appropriately to reach the target length)
 
-Flexibility:
-- Do NOT use a fixed taxonomy unless it naturally fits.
-- You may tag tasks (tags field), but tags are flexible.
-
-Quality bar:
-- Assume the reader is a developer; use correct terminology.
-- Bullets must be actionable: build/compare/measure/verify/debug.
-- Ensure the overall plan includes at least 2 of these somewhere:
-  * minimal code sketch / MWE (set requires_code=True for that section)
-  * edge cases / failure modes
-  * performance/cost considerations
-  * security/privacy considerations (if relevant)
-  * debugging/observability tips
+Tone & Universal Readability:
+- No matter the audience, the blog should be universally engaging.
+- Plan to explain the core intuition using analogies so a junior can follow, while planning deep-dive code blocks for seniors.
 
 Grounding rules:
 - Mode closed_book: keep it evergreen; do not depend on evidence.
 - Mode hybrid:
-  - Use evidence for up-to-date examples (models/tools/releases) in bullets.
+  - Use evidence for up-to-date examples in bullets.
   - Mark sections using fresh info as requires_research=True and requires_citations=True.
 - Mode open_book (weekly news roundup):
   - Set blog_kind = "news_roundup".
   - Every section is about summarizing events + implications.
-  - DO NOT include tutorial/how-to sections (no scraping/RSS/how to fetch news) unless user explicitly asked for that.
-  - If evidence is empty or insufficient, create a plan that transparently says "insufficient fresh sources"
-    and includes only what can be supported.
+  - If evidence is empty, create a plan that says "insufficient fresh sources".
 
 Output must strictly match the Plan schema.
 """
 
 def orchestrator_node(state: BlogState):
-    planner = llm.with_structured_output(Plan)
+    llm = get_llm(state)
+    model_name = state.get("model_name", "GPT-4o")
+    planner = llm.with_structured_output(Plan, include_raw=True)
     evidence = state.get("evidence", [])
     mode = state.get("mode", "closed_book")
 
     forced_kind = "news_roundup" if mode == "open_book" else None
 
-    plan = planner.invoke(
+    response = planner.invoke(
         [
             SystemMessage(content=PLANNER_SYSTEM_PROMPT),
             HumanMessage(
                 content=(
                     f"Topic: {state['topic']}\n"
                     f"Mode: {mode}\n"
+                    f"Target Length: {state.get('length', 'Medium (~1000 words)')}\n"
                     f"As-of: {state['as_of']} (recency_days={state['recency_days']})\n"
                     f"{'Force blog_kind=news_roundup' if forced_kind else ''}\n\n"
                     f"Evidence (ONLY use for fresh claims; may be empty):\n"
                     f"{[e.model_dump() for e in evidence][:16]}\n\n"
-                    f"Instruction: If mode=open_book, your plan must NOT drift into a tutorial."
+                    f"Instruction: Ensure the section count matches the requested Target Length."
                 )
             ),
         ]
     )
+    
+    plan = response["parsed"]
+    metrics_log = extract_usage(response["raw"], "Orchestrator Node", model_name)
 
     if forced_kind:
         plan.blog_kind = "news_roundup"
 
-    return {"plan": plan}
+    return {"plan": plan, "metrics": [metrics_log]}
 
 
 # ---------------------------------------------------------------------
@@ -341,6 +386,8 @@ def fanout(state: BlogState):
         worker_state = {
             "task": task.model_dump(),
             "topic": state["topic"],
+            "length": state.get("length", "Medium (~1000 words)"),
+            "model_name": state.get("model_name"),
             "mode": state["mode"],
             "as_of": state["as_of"],
             "recency_days": state["recency_days"],
@@ -356,8 +403,8 @@ def fanout(state: BlogState):
 # ---------------------------------------------------------------------
 # Worker Node: Generates the content of a single section
 # ---------------------------------------------------------------------
-WORKER_SYSTEM_PROMPT = """You are a senior technical writer and developer advocate.
-Write ONE section of a technical blog post in Markdown.
+WORKER_SYSTEM_PROMPT = """You are an expert developer and writer crafting an engaging, story-driven blog for a platform like Hashnode.
+Write ONE section of a blog post in Markdown.
 
 Hard constraints:
 - Follow the provided Goal and cover ALL Bullets in order (do not skip or merge bullets).
@@ -365,26 +412,19 @@ Hard constraints:
 - Output ONLY the section content in Markdown (no blog title H1, no extra commentary).
 - Start with a '## <Section Title>' heading.
 
-Scope guard (prevents mid-blog topic drift):
-- If blog_kind == "news_roundup": do NOT turn this into a tutorial/how-to guide.
-  Do NOT teach web scraping, RSS, automation, or "how to fetch news" unless bullets explicitly ask for it.
-  Focus on summarizing events and implications.
+Hashnode Style & Universal Readability constraints:
+- Write like a human speaking to a colleague over coffee. Start with an engaging narrative or hook if appropriate.
+- ALWAYS explain the intuition behind complex topics using simple analogies so a junior can follow along.
+- NEVER write a 'wall of text'. Paragraphs must NOT exceed 3 sentences.
+- Use frequent line breaks, bold emphasis, blockquotes, and bullet points to break up your writing.
 
 Grounding policy:
-- If mode == open_book (weekly news):
-  - Do NOT introduce any specific event/company/model/funding/policy claim unless it is supported by provided Evidence URLs.
-  - For each event claim, attach a source as a Markdown link: ([Source](URL)).
-  - Only use URLs provided in Evidence. If not supported, write: "Not found in provided sources."
-- If requires_citations == true (hybrid sections):
-  - For outside-world claims, cite Evidence URLs the same way.
-- Evergreen reasoning (concepts, intuition) is OK without citations unless requires_citations is true.
+- Do NOT introduce any specific event/company/model claim unless supported by Evidence URLs.
+- Cite Evidence URLs as Markdown links: ([Source](URL)).
+- Evergreen reasoning (concepts, intuition) is OK without citations.
 
 Code:
-- If requires_code == true, include at least one minimal, correct code snippet relevant to the bullets.
-
-Style:
-- Short paragraphs, bullets where helpful, code fences for code.
-- Avoid fluff/marketing. Be precise and implementation-oriented.
+- If requires_code == true, include at least one minimal, correct code snippet.
 """
 
 def worker_node(payload: dict) -> dict:
@@ -395,6 +435,7 @@ def worker_node(payload: dict) -> dict:
     mode = payload.get("mode", "closed_book")
     as_of = payload.get("as_of")
     recency_days = payload.get("recency_days")
+    llm = get_llm(payload)
 
     bullets_text = "\n- " + "\n- ".join(task.bullets)
 
@@ -413,6 +454,7 @@ def worker_node(payload: dict) -> dict:
                     f"Blog title: {plan.blog_title}\n"
                     f"Audience: {plan.audience}\n"
                     f"Tone: {plan.tone}\n"
+                    f"Target Length: {payload.get('length', 'Medium (~1000 words)')}\n"
                     f"Blog kind: {plan.blog_kind}\n"
                     f"Constraints: {plan.constraints}\n"
                     f"Topic: {topic}\n"
@@ -430,9 +472,18 @@ def worker_node(payload: dict) -> dict:
                 )
             ),
         ]
-    ).content.strip()
+    )
+    
+    model_name = payload.get("model_name", "GPT-4o")
+    metrics_log = extract_usage(section_md, f"Worker ({task.title})", model_name)
 
-    return {"sections": [(task.id, section_md)]}
+    content = section_md.content
+    if isinstance(content, list):
+        content = "".join([c.get("text", "") for c in content if isinstance(c, dict) and "text" in c])
+    elif not isinstance(content, str):
+        content = str(content)
+
+    return {"sections": [(task.id, content.strip())], "metrics": [metrics_log]}
 
 
 # ---------------------------------------------------------------------
@@ -446,10 +497,22 @@ def merge_content(state: BlogState):
     # Map task_id to placeholders
     from collections import defaultdict
     task_placeholders = defaultdict(list)
+    thumbnail_ph = ""
+    
     for i, spec in enumerate(image_specs):
         # We assign the placeholder programmatically
         spec["placeholder"] = f"[[IMAGE_{i}]]"
-        task_placeholders[spec.get("task_id", 0)].append(f"[[IMAGE_{i}]]")
+        
+        # The prompt mandates the first image is the thumbnail
+        if i == 0:
+            thumbnail_ph = f"[[IMAGE_{i}]]\n\n"
+        else:
+            t_id = spec.get("task_id")
+            valid_ids = [t for t, m in sorted_sections]
+            # Fallback to last valid section if AI hallucinates task_id
+            if t_id not in valid_ids and valid_ids:
+                t_id = valid_ids[-1]
+            task_placeholders[t_id].append(spec["placeholder"])
 
     ordered_sections = []
     for task_id, markdown in sorted_sections:
@@ -459,29 +522,33 @@ def merge_content(state: BlogState):
         ordered_sections.append(markdown)
     
     body = "\n\n".join(ordered_sections).strip()
-    merged_md = f"# {plan.blog_title}\n\n{body}\n"
+    merged_md = f"# {plan.blog_title}\n\n{thumbnail_ph}{body}\n"
     
     # Return updated image_specs with placeholders and the merged_md
     return {"merged_md": merged_md, "image_specs": image_specs}
 
 
 DECIDE_IMAGES_SYSTEM_PROMPT = """
-You are an expert Technical Editor. decide if images/diagrams are needed for THIS blog.
+You are an expert Technical Editor. You must plan the images for this blog post.
 
 Rules:
-- You MUST generate at least 1 image for visual flair, up to a maximum of 3 images total.
-- Each image should be highly relevant (e.g., conceptual diagram, architecture, or tech visualization).
-- Assign each image to a specific task_id from the plan.
-- Do not return empty images list.
+1. You MUST always generate exactly 1 "Featured Thumbnail" image that captures the overarching theme of the blog. This image MUST use the '1536x1024' (landscape) size and should be assigned to the first task_id (the introduction).
+2. You MUST additionally generate at least 1, and up to 3, images (e.g., conceptual diagrams, architectures, or tech visualizations) for the body of the blog.
+3. Therefore, you must return a minimum of 2 images and a maximum of 4 images in total.
+4. Keep the image quality to be 'medium'.
+5. Assign each image to the most appropriate task_id from the plan.
+
 Return STRICTLY GlobalImagePlan.
 """
 
 def decide_images(state: BlogState) -> dict:
     plan = state["plan"]
     assert plan is not None
+    llm = get_llm(state)
+    model_name = state.get("model_name", "GPT-4o")
 
-    image_insertion_planner = llm.with_structured_output(GlobalImagePlan)
-    image_plan = image_insertion_planner.invoke(
+    image_insertion_planner = llm.with_structured_output(GlobalImagePlan, include_raw=True)
+    response = image_insertion_planner.invoke(
         [
             SystemMessage(content=DECIDE_IMAGES_SYSTEM_PROMPT),
             HumanMessage(
@@ -494,15 +561,19 @@ def decide_images(state: BlogState) -> dict:
             )
         ]
     )
+    
+    image_plan = response["parsed"]
+    metrics_log = extract_usage(response["raw"], "Image Planner Node", model_name)
 
     return {
-        "image_specs": [img.model_dump() for img in image_plan.images]
+        "image_specs": [img.model_dump() for img in image_plan.images],
+        "metrics": [metrics_log]
     }
 
 
 import requests
 
-def openai_generate_image_bytes(prompt: str) -> bytes:
+def openai_generate_image_bytes(prompt: str, size: str = "1536x1024", quality: str = "standard") -> bytes:
     """
     Generates an image using OpenAI DALL-E-3 API and downloads the raw bytes.
     """
@@ -513,14 +584,22 @@ def openai_generate_image_bytes(prompt: str) -> bytes:
     client = OpenAI(api_key=api_key)
 
     resp = client.images.generate(
-        model="dall-e-2",
+        model="gpt-image-1",
         prompt=prompt,
         n=1,
-        size="1024x1024"
+        size=size,
+        quality=quality
     )
 
-    if not resp.data or not resp.data[0].url:
+    if not resp.data:
         raise RuntimeError("No image content returned from OpenAI.")
+
+    if resp.data[0].b64_json:
+        import base64
+        return base64.b64decode(resp.data[0].b64_json)
+
+    if not resp.data[0].url:
+        raise RuntimeError("Neither b64_json nor url was returned.")
 
     image_url = resp.data[0].url
     
@@ -543,20 +622,40 @@ def generate_and_place_images(state: BlogState):
     if not image_specs:
         return {"final_blog": md}
 
+    image_count = 0
     for spec in image_specs:
         placeholder = spec["placeholder"]
         try:
             # 1. Generate image bytes
-            img_bytes = openai_generate_image_bytes(spec["prompt"])
-            # 2. Upload to Cloudinary to get hosted secure URL
-            img_url = upload_image_bytes(img_bytes)
+            img_bytes = openai_generate_image_bytes(
+                prompt=spec["prompt"], 
+                size=spec.get("size", "1536x1024"),
+                quality=spec.get("quality", "medium")
+            )
+            image_count += 1
         except Exception as e:
-            print(f"IMAGE GENERATION / UPLOAD ERROR: {e}")
+            error_msg = f"OPENAI DALL-E ERROR: {e}"
+            print(error_msg)
             prompt_block = (
                 f"\n> **[IMAGE GENERATION FAILED]** {spec.get('caption','')}\n>\n"
                 f"> **Alt:** {spec.get('alt','')}\n>\n"
                 f"> **Prompt:** {spec.get('prompt','')}\n>\n"
-                f"> **Error:** {e}\n"
+                f"> **Error:** {error_msg}\n"
+            )
+            md = md.replace(placeholder, prompt_block)
+            continue
+
+        try:
+            # 2. Upload to Cloudinary to get hosted secure URL
+            img_url = upload_image_bytes(img_bytes)
+        except Exception as e:
+            error_msg = f"CLOUDINARY UPLOAD ERROR: {e}"
+            print(error_msg)
+            prompt_block = (
+                f"\n> **[IMAGE UPLOAD FAILED]** {spec.get('caption','')}\n>\n"
+                f"> **Alt:** {spec.get('alt','')}\n>\n"
+                f"> **Prompt:** {spec.get('prompt','')}\n>\n"
+                f"> **Error:** {error_msg}\n"
             )
             md = md.replace(placeholder, prompt_block)
             continue
@@ -570,8 +669,14 @@ def generate_and_place_images(state: BlogState):
             f'</p>'
         )
         md = md.replace(placeholder, img_md)
+        
+    metrics_log = {
+        "node": "Generate Images",
+        "model_name": "gpt-image-1",
+        "images_generated": image_count
+    }
     
-    return {"final_blog": md}
+    return {"final_blog": md, "metrics": [metrics_log]}
 
 
 # Compile Reducer Subgraph

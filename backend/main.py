@@ -13,6 +13,13 @@ from pathlib import Path
 from langchain_tavily import TavilySearch
 from datetime import date, datetime, timedelta
 
+# To generate blog image
+# from google import genai
+# from google.genai import types
+from openai import OpenAI
+import base64
+
+import os
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -21,7 +28,7 @@ load_dotenv()
 # ------------------------------------------------------------
 # Initialize LLM
 # ------------------------------------------------------------
-llm = ChatOpenAI(model="gpt-4.1-mini")
+llm = ChatOpenAI(model="gpt-4o-mini")
 
 
 # ------------------------------------------------------------
@@ -104,6 +111,21 @@ class RouterDecision(BaseModel):
     queries:List[str] = Field(default_factory=list)  #Have some doubt on Default factory
 
 
+# Schemas for Blog images
+
+class ImageSpec(BaseModel):
+    placeholder:str = Field(..., description="e.g. [[IMAGE_1]]")
+    filename:str = Field(..., description="Svae under /images, e.g. abc_flow.png")
+    alt:str
+    caption:str
+    prompt:str = Field(..., description="Prompt to send to image model")
+    size:Literal["1024x1024", "1024x1536", "1536x1024"] = "1024x1024"
+    quality:Literal["low", "medium", "high"] = "medium"
+
+class GlobalImagePlan(BaseModel):
+    md_with_placeholders: str
+    images: List[ImageSpec] = Field(default_factory=list)
+
 # Define State of Graph
 class BlogState(TypedDict):
     topic:str
@@ -116,12 +138,19 @@ class BlogState(TypedDict):
     evidence:List[EvidenceItem]
     plan:Optional[Plan]
 
-    # NEW: recency control
+    # recency control
     as_of: str           # ISO date, e.g. "2026-01-29"
     recency_days: int    # 7 for weekly news, 30 for hybrid, etc.
 
     # workers
     sections:Annotated[List[tuple[int, str]], operator.add]
+
+    # images
+    merged_md:str
+    md_with_placeholders:str
+    image_specs:List[dict]
+
+    # Final generated blog
     final_blog:str
 
 
@@ -129,7 +158,7 @@ class BlogState(TypedDict):
 # Route node:
 # -------------------------------------------------------------------
 
-# System Prompt to decide wheather Rsearch needed
+# System Prompt to decide whether Research is needed
 ROUTER_SYSTEM_PROMPT = """You are a routing module for a technical blog planner.
 
 Decide whether web research is needed BEFORE planning.
@@ -145,17 +174,24 @@ Modes:
 If needs_research=true:
 - Output 3–10 high-signal queries.
 - Queries should be scoped and specific (avoid generic queries like just "AI" or "LLM").
-- For open_book weekly roundup, include queries that reflect the last 7 days constraint.
+- Ensure all queries target the most up-to-date and relevant information up to the provided Current Date/As-Of (do not generate queries with outdated years like 2023 unless explicitly requested, use the current year/timeframe).
+- If user asked for "last week/this week/latest", reflect that constraint IN THE QUERIES.
 """
 
 # Router Node
 def router_node(state:BlogState):
     topic = state["topic"]
+    as_of = state.get("as_of", date.today().isoformat())
     decider_llm = llm.with_structured_output(RouterDecision)
     decision = decider_llm.invoke(
         [
             SystemMessage(content=ROUTER_SYSTEM_PROMPT),
-            HumanMessage(content=f'Topic: {topic}')
+            HumanMessage(
+                content=(
+                    f"Topic: {topic}\n"
+                    f"Current Date/As-Of: {as_of}"
+                )
+            )
         ]
     )
 
@@ -189,15 +225,16 @@ def route_next(state:BlogState):
 # --------------------------------------------------------------------
 
 # Tavily internet Search engine
-def _tavily_search(query:str, max_result:int = 5) -> List[dict]:
+def _tavily_search(query:str, max_results:int = 5) -> List[dict]:
     """
     Uses TavilySearchResults if installed and TAVILY_API_KEY is set.
     Returns list of dict with common fields. Note: published date is often missing.
     """
-    tool = TavilySearch(max_result = max_result)
-    results = tool.invoke({"query":query})
+    tool = TavilySearch(max=max_results)
+    tavily_response = tool.invoke({"query": query})
+    results = tavily_response.get("results", [])
 
-    normalized: List[dict] = []
+    normalized = []
     for result in results:
         normalized.append(
             {
@@ -453,30 +490,184 @@ def worker_node(payload: dict) -> dict:
     # deterministic ordering
     return {"sections": [(task.id, section_md)]}
 
-def reducer_node(state:BlogState):
-    title = state["plan"].blog_title
+# def reducer_node(state:BlogState):
 
-    sorted_sections = sorted(
-        state["sections"],
-        key=lambda x: x[0]
-    )
+#     ## save to file
+#     # remove the other useless character, It only allows letters and numbers (isalnum()), spaces (" "), underscores ("_"), and hyphens ("-").
+#     
+
+#     return {"final_blog": final_md}
+
+
+# ============================================================
+# ReducerWithImages (subgraph)
+# merge_content -> decide_images -> generate_and_place_images
+# ============================================================
+
+def merge_content(state:BlogState):
+    plan = state["plan"]
+    sorted_sections = sorted(state["sections"], key=lambda x : x[0])
 
     ordered_sections = []
-    for task_id, markdown in sorted_sections:
+    for  task_id, markdown in sorted_sections:
         ordered_sections.append(markdown)
-
+    
     body = "\n\n".join(ordered_sections).strip()
-    final_md = f"# {title}\n\n{body}\n"
+    merged_md = f"# {plan.blog_title}\n\n{body}\n"
+    return {"merged_md": merged_md}
 
-    ## save to file
-    # remove the other useless character, It only allows letters and numbers (isalnum()), spaces (" "), underscores ("_"), and hyphens ("-").
-    filename = "".join(c if c.isalnum() or c in (" ", "_", "-") else "" for c in title)
+
+DECIDE_IMAGES_SYSTEM_PROMPT="""
+You are an expert Technical Editor. decide if images/diagrams are needed for THIS blog.
+
+Rules:
+- Max 3 images total
+- Each image must materially improve understanding (diagram/flow/table-like visual).
+- Insert placeholders exactly: [[IMAGE_1]], [[IMAGE_2]], [[IMAGE_3]]
+- If no images needed: md_with_placeholders must equal input and images=[].
+- Avoid decorative images; Prefer technical diagrams with short labels.
+Return STRICTLY GlobalImagePlan.
+"""
+
+def decide_images(state:BlogState) -> dict:
+    plan = state["plan"]
+    assert plan is not None
+    merged_md = state["merged_md"]
+
+    image_insertion_planner = llm.with_structured_output(GlobalImagePlan)
+    image_plan = image_insertion_planner.invoke(
+        [
+            SystemMessage(content=DECIDE_IMAGES_SYSTEM_PROMPT),
+            HumanMessage(
+                content=(
+                    f"Blog kind: {plan.blog_kind}\n"
+                    f"Topic: {state["topic"]}\n\n"
+                    f"Insert placeholders + propose image prompts.\n\n"
+                    f"{merged_md}"
+                )
+            )
+        ]
+    )
+
+    return {
+        "md_with_placeholders": image_plan.md_with_placeholders,
+        "image_specs": [img.model_dump() for img in image_plan.images]
+    }
+
+
+def openai_generate_image_bytes(prompt:str)->bytes:
+    """
+    Returns raw image bytes generated by OpenAI.
+    Requires: pip install openai
+    Env var: OPENAI_API_KEY
+    """
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY is not set.")
+
+    client = OpenAI(api_key=api_key)
+
+    resp = client.images.generate(
+        model="gpt-image-2",
+        prompt=prompt,
+        n=1,
+        size="1024x1024"
+    )
+
+    if not resp.data or not resp.data[0].b64_json:
+        raise RuntimeError("No image content returned from OpenAI.")
+
+    return base64.b64decode(resp.data[0].b64_json)
+
+
+
+def generate_and_place_images(state:BlogState):
+    plan = state["plan"]
+    assert plan is not None
+    print("\nBlog Title:: \n", plan.blog_title)
+    print(repr(plan.blog_title))
+
+    md = state.get("md_with_placeholders") or state.get("merged_md")
+    image_specs = state.get("image_specs", [])
+
+    # For debugging purpose ======================================
+    print("=" * 80)
+    print("IMAGE SPECS")
+    print(image_specs)
+    print("=" * 80)
+
+    print("Markdown contains placeholders?")
+    print(md[:500])   # first 500 chars
+
+    # ====================================================================
+
+    # Clean/sanitize filename to avoid illegal characters (especially colons on Windows)
+    filename = "".join(c if c.isalnum() or c in (" ", "_", "-") else "" for c in plan.blog_title)
     filename = filename.strip().lower().replace(" ", "_")
     filename = filename[:60] + ".md"
-    Path(filename).write_text(final_md, encoding="utf-8")
 
-    return {"final_blog": final_md}
+    # Prepare blogs folder
+    blogs_dir = Path("blogs")
+    blogs_dir.mkdir(exist_ok=True)
+    blog_filepath = blogs_dir / filename
 
+    # If no images requested , just write merged markdown
+    if not image_specs:
+        blog_filepath.write_text(md, encoding="utf-8")
+        return {"final_blog": md}
+    
+    images_dir = Path("images")
+    images_dir.mkdir(exist_ok=True)
+
+    for spec in image_specs:
+        placeholder = spec["placeholder"]
+        img_filename = spec["filename"]
+        out_path = images_dir/img_filename
+        # Generate only if needed
+        if not out_path.exists():
+            try:
+                img_bytes = openai_generate_image_bytes(spec["prompt"])
+                out_path.write_bytes(img_bytes)
+            except Exception as e:
+                print("=" * 80)
+                print("IMAGE ERROR")
+                print(repr(e))
+                print("=" * 80)
+                prompt_block = (
+                    f"> **[IMAGE GENERATION FAILED]** {spec.get('caption','')}\n>\n"
+                    f"> **Alt:** {spec.get('alt','')}\n>\n"
+                    f"> **Prompt:** {spec.get('prompt','')}\n>\n"
+                    f"> **Error:** {e}\n"
+                )
+                md = md.replace(placeholder, prompt_block)
+                continue
+
+        # Format image to be responsive and center-aligned using HTML with constrained size for standard blogs
+        img_md = (
+            f'<p align="center">\n'
+            f'  <img src="../images/{img_filename}" alt="{spec["alt"]}" width="750" style="max-width: 100%; height: auto; border-radius: 8px;" />\n'
+            f'  <br />\n'
+            f'  <em>{spec["caption"]}</em>\n'
+            f'</p>'
+        )
+        md = md.replace(placeholder, img_md)
+    
+    blog_filepath.write_text(md, encoding="utf-8")
+    return {"final_blog": md}
+
+# Define Reducer Subgraph
+reducer_graph = StateGraph(BlogState)
+# create subgraph nodes
+reducer_graph.add_node("merge_content", merge_content)
+reducer_graph.add_node("decide_images", decide_images)
+reducer_graph.add_node("generate_and_place_images", generate_and_place_images)
+# Create subgraph nodes with edges
+reducer_graph.add_edge(START, "merge_content")
+reducer_graph.add_edge("merge_content", "decide_images")
+reducer_graph.add_edge("decide_images", "generate_and_place_images")
+reducer_graph.add_edge("generate_and_place_images", END)
+
+reducer_subgraph = reducer_graph.compile()
 
 
 # Graph initialization, Add Nodes and Add edges
@@ -487,7 +678,8 @@ builder.add_node("router", router_node)
 builder.add_node("research", research_node)
 builder.add_node("orchestrator", orchestrator_node)
 builder.add_node("worker", worker_node)
-builder.add_node("reducer", reducer_node)
+# builder.add_node("reducer", reducer_node)
+builder.add_node("reducer", reducer_subgraph)
 
 # add Graph edges
 builder.add_edge(START, "router")
@@ -513,8 +705,11 @@ def run(topic: str, as_of: Optional[str] = None):
             "evidence": [],
             "plan": None,
             "as_of": as_of,
-            "recency_days": 7,   # router may overwrite
+            "recency_days": 7,
             "sections": [],
+            "merged_md": "",
+            "md_with_placeholders": "",
+            "image_specs": [],
             "final_blog": "",
         }
     )
@@ -525,7 +720,7 @@ def run(topic: str, as_of: Optional[str] = None):
     print("AS_OF:", out.get("as_of"), "RECENCY_DAYS:", out.get("recency_days"))
     print("MODE:", out.get("mode"))
     print("BLOG_KIND:", plan.blog_kind)
-    print("NEEDS_RESEARCH:", out.get("needs_research"))
+    print("NEEDS_RESEARCH:", out.get("need_research"))
     print("QUERIES:", (out.get("queries") or [])[:6])
     print("EVIDENCE_COUNT:", len(out.get("evidence", [])))
     if out.get("evidence"):
