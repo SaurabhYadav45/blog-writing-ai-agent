@@ -7,9 +7,13 @@ class BlogBase(SQLModel):
     topic: str
     tone: str
     audience: str
-    length: Optional[str] = "Medium (~1000 words)"
+    depth: Optional[str] = "Standard Guide"
+    cta: Optional[str] = None
+    reference_urls: Optional[str] = None
     model_name: Optional[str] = "GPT-4o"
     metrics: Optional[Dict] = Field(default={}, sa_column=Column(JSON))
+    seo_metadata: Optional[Dict] = Field(default={}, sa_column=Column(JSON))
+    latency: float = Field(default=0.0)
 
 class Blog(BlogBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

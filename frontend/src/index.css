@@ -1,0 +1,55 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+@plugin "@tailwindcss/typography";
+
+body {
+  @apply bg-orange-50 text-slate-800 antialiased;
+  font-family: 'Outfit', sans-serif;
+  /* Beautiful light orange/white mesh gradient background */
+  background-image: 
+    radial-gradient(at 0% 0%, hsla(28,100%,74%,0.15) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, hsla(18,100%,84%,0.15) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, hsla(38,100%,74%,0.15) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, hsla(8,100%,84%,0.15) 0px, transparent 50%);
+  background-attachment: fixed;
+}
+
+/* Custom scrollbar for light theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(251, 146, 60, 0.4); /* orange-400 with transparency */
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(249, 115, 22, 0.7); /* orange-500 */
+}
+
+/* Slimmer scrollbar for specific elements */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(251, 146, 60, 0.2);
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(249, 115, 22, 0.5);
+}
+
+/* Glassmorphism utility classes */
+@utility glass-panel {
+  @apply bg-white/60 backdrop-blur-xl border border-white/40 shadow-[0_8px_32px_0_rgba(251,146,60,0.1)];
+}
+
+@utility glass-sidebar {
+  @apply bg-white/70 backdrop-blur-2xl border-r border-orange-100/50 shadow-sm;
+}

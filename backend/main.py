@@ -655,16 +655,74 @@ def generate_and_place_images(state:BlogState):
     blog_filepath.write_text(md, encoding="utf-8")
     return {"final_blog": md}
 
+def fetch_youtube_video(topic: str) -> str:
+    try:
+        from googleapiclient.discovery import build
+        import httplib2
+    except ImportError:
+        return ""
+        
+    api_key = os.getenv("YOUTUBE_API_KEY")
+    if not api_key:
+        print("YOUTUBE_API_KEY not found in .env, skipping YouTube integration.")
+        return ""
+    
+    youtube = build("youtube", "v3", developerKey=api_key)
+    query = f"{topic} tutorial explanation"
+    
+    try:
+        request = youtube.search().list(
+            part="snippet",
+            q=query,
+            type="video",
+            maxResults=1,
+            order="relevance",
+            videoEmbeddable="true"
+        )
+        response = request.execute()
+        
+        if "items" in response and len(response["items"]) > 0:
+            video_id = response["items"][0]["id"]["videoId"]
+            title = response["items"][0]["snippet"]["title"]
+            
+            iframe = (
+                f'\n\n## Related Video Tutorial\n\n'
+                f'<p align="center">\n'
+                f'  <iframe width="750" height="422" src="https://www.youtube.com/embed/{video_id}" '
+                f'frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" '
+                f'allowfullscreen style="max-width: 100%; border-radius: 8px; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);"></iframe>\n'
+                f'  <br />\n'
+                f'  <em>{title}</em>\n'
+                f'</p>\n'
+            )
+            return iframe
+        return ""
+    except Exception as e:
+        print(f"YouTube search error: {e}")
+        return ""
+
+def embed_youtube_video(state: BlogState):
+    md = state.get("md_with_placeholders") or state.get("merged_md")
+    topic = state.get("topic", "")
+    
+    iframe_markdown = fetch_youtube_video(topic)
+    if iframe_markdown:
+        md += iframe_markdown
+        
+    return {"md_with_placeholders": md}
+
 # Define Reducer Subgraph
 reducer_graph = StateGraph(BlogState)
 # create subgraph nodes
 reducer_graph.add_node("merge_content", merge_content)
 reducer_graph.add_node("decide_images", decide_images)
+reducer_graph.add_node("embed_youtube", embed_youtube_video)
 reducer_graph.add_node("generate_and_place_images", generate_and_place_images)
 # Create subgraph nodes with edges
 reducer_graph.add_edge(START, "merge_content")
 reducer_graph.add_edge("merge_content", "decide_images")
-reducer_graph.add_edge("decide_images", "generate_and_place_images")
+reducer_graph.add_edge("decide_images", "embed_youtube")
+reducer_graph.add_edge("embed_youtube", "generate_and_place_images")
 reducer_graph.add_edge("generate_and_place_images", END)
 
 reducer_subgraph = reducer_graph.compile()

@@ -140,7 +140,9 @@ class GlobalImagePlan(BaseModel):
 class BlogState(TypedDict):
     topic: str
     model_name: str
-    length: str
+    depth: str
+    cta: Optional[str]
+    reference_urls: Optional[str]
     
     # routing and research
     mode: str
@@ -164,6 +166,7 @@ class BlogState(TypedDict):
 
     # Final generated blog
     final_blog: str
+    seo_metadata: dict
     
     # Metrics
     metrics: Annotated[List[dict], operator.add]
@@ -280,8 +283,34 @@ def research_node(state: BlogState) -> dict:
     llm = get_llm(state)
 
     raw_results: List[dict] = []
-    for q in queries:
-        raw_results.extend(_tavily_search(q, max_results=max_results))
+    
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_query = {executor.submit(_tavily_search, q, max_results): q for q in queries}
+        for future in concurrent.futures.as_completed(future_to_query):
+            try:
+                results = future.result()
+                raw_results.extend(results)
+            except Exception as e:
+                print(f"Tavily search generated an exception: {e}")
+                
+    reference_urls = state.get("reference_urls")
+    if reference_urls:
+        import requests
+        for url in reference_urls.split(","):
+            url = url.strip()
+            if url:
+                try:
+                    r = requests.get(url, timeout=5)
+                    raw_results.append({
+                        "title": f"Reference: {url}",
+                        "url": url,
+                        "snippet": r.text[:2000],
+                        "published_at": "",
+                        "source": "User Reference"
+                    })
+                except Exception as e:
+                    print(f"Error fetching reference URL {url}: {e}")
 
     if not raw_results:
         return {"evidence": []}
@@ -307,12 +336,12 @@ def research_node(state: BlogState) -> dict:
 # Orchestrator Node
 # ---------------------------------------------------------------------
 PLANNER_SYSTEM_PROMPT = """You are an expert orchestrator and blog planner.
-Your job is to produce a highly actionable outline for a blog post based on the requested Target Length.
+Your job is to produce a highly actionable outline for a blog post based on the requested Depth / Complexity.
 
-Target Length Guidelines:
-- "Short (~500 words)": Create exactly 3-4 sections (tasks). Keep goals very concise.
-- "Medium (~1000 words)": Create exactly 5-6 sections (tasks).
-- "Long (~2000 words)": Create exactly 7-10 sections (tasks).
+Depth / Complexity Guidelines:
+- "Brief Overview": Create exactly 3-4 sections (tasks). Keep goals very concise.
+- "Standard Guide": Create exactly 5-6 sections (tasks).
+- "Ultimate Deep-Dive": Create exactly 7-10 sections (tasks).
 
 Hard requirements:
 - Each task must include:
@@ -353,12 +382,12 @@ def orchestrator_node(state: BlogState):
                 content=(
                     f"Topic: {state['topic']}\n"
                     f"Mode: {mode}\n"
-                    f"Target Length: {state.get('length', 'Medium (~1000 words)')}\n"
+                    f"Target Depth: {state.get('depth', 'Standard Guide')}\n"
                     f"As-of: {state['as_of']} (recency_days={state['recency_days']})\n"
                     f"{'Force blog_kind=news_roundup' if forced_kind else ''}\n\n"
                     f"Evidence (ONLY use for fresh claims; may be empty):\n"
                     f"{[e.model_dump() for e in evidence][:16]}\n\n"
-                    f"Instruction: Ensure the section count matches the requested Target Length."
+                    f"Instruction: Ensure the section count matches the requested Target Depth."
                 )
             ),
         ]
@@ -386,7 +415,7 @@ def fanout(state: BlogState):
         worker_state = {
             "task": task.model_dump(),
             "topic": state["topic"],
-            "length": state.get("length", "Medium (~1000 words)"),
+            "depth": state.get("depth", "Standard Guide"),
             "model_name": state.get("model_name"),
             "mode": state["mode"],
             "as_of": state["as_of"],
@@ -416,15 +445,18 @@ Hashnode Style & Universal Readability constraints:
 - Write like a human speaking to a colleague over coffee. Start with an engaging narrative or hook if appropriate.
 - ALWAYS explain the intuition behind complex topics using simple analogies so a junior can follow along.
 - NEVER write a 'wall of text'. Paragraphs must NOT exceed 3 sentences.
-- Use frequent line breaks, bold emphasis, blockquotes, and bullet points to break up your writing.
+- Break up your writing using '###' subheadings for each logical part of the section.
+- Use frequent line breaks, bold emphasis, blockquotes, and bullet points.
+- Use GitHub-style callouts (`> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`, `> [!CAUTION]`) to highlight key takeaways, tips, or warnings.
 
 Grounding policy:
 - Do NOT introduce any specific event/company/model claim unless supported by Evidence URLs.
 - Cite Evidence URLs as Markdown links: ([Source](URL)).
 - Evergreen reasoning (concepts, intuition) is OK without citations.
 
-Code:
+Code & Diagrams:
 - If requires_code == true, include at least one minimal, correct code snippet.
+- For complex technical flows or architectures, generate ` ```mermaid ` blocks instead of asking for images.
 """
 
 def worker_node(payload: dict) -> dict:
@@ -454,7 +486,7 @@ def worker_node(payload: dict) -> dict:
                     f"Blog title: {plan.blog_title}\n"
                     f"Audience: {plan.audience}\n"
                     f"Tone: {plan.tone}\n"
-                    f"Target Length: {payload.get('length', 'Medium (~1000 words)')}\n"
+                    f"Target Depth: {payload.get('depth', 'Standard Guide')}\n"
                     f"Blog kind: {plan.blog_kind}\n"
                     f"Constraints: {plan.constraints}\n"
                     f"Topic: {topic}\n"
@@ -533,10 +565,10 @@ You are an expert Technical Editor. You must plan the images for this blog post.
 
 Rules:
 1. You MUST always generate exactly 1 "Featured Thumbnail" image that captures the overarching theme of the blog. This image MUST use the '1536x1024' (landscape) size and should be assigned to the first task_id (the introduction).
-2. You MUST additionally generate at least 1, and up to 3, images (e.g., conceptual diagrams, architectures, or tech visualizations) for the body of the blog.
-3. Therefore, you must return a minimum of 2 images and a maximum of 4 images in total.
+2. DO NOT generate any additional images for the body. Internal diagrams will be handled via Mermaid.js.
+3. Therefore, you must return EXACTLY 1 image in total.
 4. Keep the image quality to be 'medium'.
-5. Assign each image to the most appropriate task_id from the plan.
+5. Assign the image to the first task_id from the plan.
 
 Return STRICTLY GlobalImagePlan.
 """
@@ -693,6 +725,117 @@ reducer_graph.add_edge("generate_and_place_images", END)
 reducer_subgraph = reducer_graph.compile()
 
 
+class SEOMetadata(BaseModel):
+    meta_description: str
+    slug: str
+    focus_keywords: List[str]
+
+class EditorOutput(BaseModel):
+    seo_metadata: SEOMetadata
+    youtube_embed_html: Optional[str] = Field(default=None, description="If highly relevant, an HTML iframe tag for a YouTube video. Provide ONLY the iframe tag.")
+    cta_paragraph: Optional[str] = Field(default=None, description="A seamlessly woven conclusion paragraph that includes the requested Call to Action (CTA).")
+
+EDITOR_SYSTEM_PROMPT = """You are an expert technical SEO specialist and Editor.
+You will receive the final draft of a blog post, along with a user-provided Call to Action (CTA).
+Your job is to:
+1. Generate structured SEO metadata based on the content (meta_description, slug, focus_keywords).
+2. If a Call to Action (CTA) is provided, write a compelling final conclusion paragraph (`cta_paragraph`) that seamlessly weaves the CTA into the ending of the blog post.
+
+Return ONLY the metadata and the optional cta paragraph. Do NOT rewrite the entire blog post!
+"""
+
+def fetch_youtube_video(topic: str) -> str:
+    try:
+        from googleapiclient.discovery import build
+    except ImportError:
+        return ""
+        
+    api_key = os.getenv("YOUTUBE_API_KEY")
+    if not api_key:
+        print("YOUTUBE_API_KEY not found in .env, skipping YouTube integration.")
+        return ""
+    
+    youtube = build("youtube", "v3", developerKey=api_key)
+    query = f"{topic} tutorial explanation"
+    
+    try:
+        request = youtube.search().list(
+            part="snippet",
+            q=query,
+            type="video",
+            maxResults=1,
+            order="relevance",
+            videoEmbeddable="true"
+        )
+        response = request.execute()
+        
+        if "items" in response and len(response["items"]) > 0:
+            video_id = response["items"][0]["id"]["videoId"]
+            title = response["items"][0]["snippet"]["title"]
+            
+            iframe = (
+                f'\n\n## Related Video Tutorial\n\n'
+                f'<p align="center">\n'
+                f'  <iframe width="750" height="422" src="https://www.youtube.com/embed/{video_id}" '
+                f'frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" '
+                f'allowfullscreen style="max-width: 100%; border-radius: 8px; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);"></iframe>\n'
+                f'  <br />\n'
+                f'  <em>{title}</em>\n'
+                f'</p>\n'
+            )
+            return iframe
+        return ""
+    except Exception as e:
+        print(f"YouTube search error: {e}")
+        return ""
+
+def editor_node(state: BlogState):
+    llm = get_llm(state)
+    model_name = state.get("model_name", "GPT-4o")
+    
+    cta = state.get("cta", "")
+        
+    editor = llm.with_structured_output(EditorOutput, include_raw=True)
+    
+    response = editor.invoke(
+        [
+            SystemMessage(content=EDITOR_SYSTEM_PROMPT),
+            HumanMessage(content=(
+                f"CTA to weave into conclusion: {cta}\n\n"
+                f"Blog Content:\n{state.get('final_blog', '')}"
+            ))
+        ]
+    )
+    
+    parsed = response["parsed"]
+    metrics_log = extract_usage(response["raw"], "Editor Node", model_name)
+    
+    final_blog = state.get("final_blog", "")
+    
+    if not parsed:
+        print("Warning: Editor structured output failed to parse.")
+        return {
+            "final_blog": final_blog,
+            "seo_metadata": {"meta_description": "", "slug": "", "focus_keywords": []},
+            "metrics": [metrics_log]
+        }
+    
+    # If the AI generated a CTA paragraph, append it
+    if parsed.cta_paragraph:
+        final_blog = f"{final_blog}\n\n## Conclusion\n\n{parsed.cta_paragraph}"
+        
+    # Directly fetch and prepend the official YouTube iframe
+    youtube_iframe = fetch_youtube_video(state.get("topic", ""))
+    if youtube_iframe:
+        final_blog = f"{youtube_iframe}\n\n{final_blog}"
+        
+    return {
+        "final_blog": final_blog,
+        "seo_metadata": parsed.seo_metadata.model_dump(),
+        "metrics": [metrics_log]
+    }
+
+
 # ---------------------------------------------------------------------
 # Compile Main Agent Graph
 # ---------------------------------------------------------------------
@@ -703,13 +846,15 @@ builder.add_node("research", research_node)
 builder.add_node("orchestrator", orchestrator_node)
 builder.add_node("worker", worker_node)
 builder.add_node("reducer", reducer_subgraph)
+builder.add_node("editor", editor_node)
 
 builder.add_edge(START, "router")
 builder.add_conditional_edges("router", route_next, {"research": "research", "orchestrator": "orchestrator"})
 builder.add_edge("research", "orchestrator")
 builder.add_conditional_edges("orchestrator", fanout, ["worker"])
 builder.add_edge("worker", "reducer")
-builder.add_edge("reducer", END)
+builder.add_edge("reducer", "editor")
+builder.add_edge("editor", END)
 
 # Expose compiled graph to be imported by the FastAPI router
 graph = builder.compile()

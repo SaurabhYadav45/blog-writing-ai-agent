@@ -9,3 +9,4 @@ openai
 cloudinary
 python-dotenv
 pydantic-settings
+google-api-python-client

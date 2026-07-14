@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 import json
 import time
+import asyncio
 from datetime import date
 from pydantic import BaseModel
 
@@ -19,7 +20,9 @@ class BlogGenerateRequest(BaseModel):
     tone: str
     audience: str
     model_name: str
-    length: str = "Medium (~1000 words)"
+    depth: str = "Standard Guide"
+    cta: str = ""
+    reference_urls: str = ""
 
 @router.post("/generate")
 def generate_blog(payload: BlogGenerateRequest, session: Session = Depends(get_session)):
@@ -32,7 +35,9 @@ def generate_blog(payload: BlogGenerateRequest, session: Session = Depends(get_s
         tone=payload.tone,
         audience=payload.audience,
         model_name=payload.model_name,
-        length=payload.length,
+        depth=payload.depth,
+        cta=payload.cta,
+        reference_urls=payload.reference_urls,
         mode="auto",
         status="PENDING"
     )
@@ -44,7 +49,7 @@ def generate_blog(payload: BlogGenerateRequest, session: Session = Depends(get_s
     return {"blog_id": db_blog.id}
 
 @router.get("/stream/{blog_id}")
-def stream_blog(blog_id: int, session: Session = Depends(get_session)):
+async def stream_blog(blog_id: int, request: Request, session: Session = Depends(get_session)):
     """
     Server-Sent Events (SSE) streaming endpoint.
     It triggers the LangGraph workflow and yields live updates back to the frontend.
@@ -53,7 +58,7 @@ def stream_blog(blog_id: int, session: Session = Depends(get_session)):
     if not db_blog:
         raise HTTPException(status_code=404, detail="Blog not found")
 
-    def event_generator():
+    async def event_generator():
         # Update database status to GENERATING
         start_time = time.time()
         db_blog.status = "GENERATING"
@@ -71,7 +76,9 @@ def stream_blog(blog_id: int, session: Session = Depends(get_session)):
                 "topic": db_blog.topic,
                 "mode": "auto",  # The router will overwrite this
                 "model_name": db_blog.model_name or "GPT-4o",
-                "length": db_blog.length or "Medium (~1000 words)",
+                "depth": db_blog.depth or "Standard Guide",
+                "cta": db_blog.cta or "",
+                "reference_urls": db_blog.reference_urls or "",
                 "need_research": False,
                 "queries": [],
                 "evidence": [],
@@ -83,14 +90,30 @@ def stream_blog(blog_id: int, session: Session = Depends(get_session)):
                 "md_with_placeholders": "",
                 "image_specs": [],
                 "final_blog": "",
+                "seo_metadata": {},
                 "metrics": [],
             }
 
             final_state = None
             current_metrics = []
             
-            # Iterate through the graph nodes as they run
-            for event in graph.stream(inputs):
+            # Iterate through the graph asynchronously to allow yielding keep-alive pings
+            iterator = graph.astream(inputs).__aiter__()
+            
+            while True:
+                if await request.is_disconnected():
+                    break
+                
+                try:
+                    # Wait up to 15 seconds for a node to finish
+                    event = await asyncio.wait_for(iterator.__anext__(), timeout=15.0)
+                except asyncio.TimeoutError:
+                    # Send an SSE comment ping to keep the browser connection alive
+                    yield ": ping\n\n"
+                    continue
+                except StopAsyncIteration:
+                    break
+
                 final_state = event  # Keep track of the latest node output
                 
                 # event is a dictionary like: {'node_name': {state_updates}}
@@ -102,7 +125,8 @@ def stream_blog(blog_id: int, session: Session = Depends(get_session)):
                     "research": {"status": "researching", "message": "Scouring the web for latest technical evidence..."},
                     "orchestrator": {"status": "orchestrating", "message": "Orchestrating blog structure and detailed outline..."},
                     "worker": {"status": "writing", "message": "Drafting blog sections concurrently..."},
-                    "reducer": {"status": "finalizing", "message": "Assembling sections and generating images..."}
+                    "reducer": {"status": "assembling", "message": "Assembling sections and generating images..."},
+                    "editor": {"status": "editing", "message": "Refining content and generating SEO metadata..."}
                 }
                 
                 info = status_map.get(node_name, {"status": "generating", "message": f"Processing {node_name}..."})
@@ -122,6 +146,8 @@ def stream_blog(blog_id: int, session: Session = Depends(get_session)):
                     plan = event[node_name]["plan"]
                     current_plan = plan.model_dump() if hasattr(plan, 'model_dump') else dict(plan)
                     info["plan"] = current_plan
+                if node_name == "editor" and "seo_metadata" in event[node_name]:
+                    info["seo_metadata"] = event[node_name]["seo_metadata"]
                     
                 if "metrics" in event[node_name] and event[node_name]["metrics"]:
                     current_metrics.extend(event[node_name]["metrics"])
@@ -132,9 +158,11 @@ def stream_blog(blog_id: int, session: Session = Depends(get_session)):
                 # SSE format requires starting with "data: " and ending with double newlines "\n\n"
                 yield f"data: {json.dumps(info)}\n\n"
 
-            # Retrieve final blog output from the reducer subgraph node output
+            # Retrieve final blog output from the reducer or editor subgraph node output
             final_blog = None
-            if final_state and "reducer" in final_state:
+            if final_state and "editor" in final_state:
+                final_blog = final_state["editor"].get("final_blog")
+            elif final_state and "reducer" in final_state:
                 final_blog = final_state["reducer"].get("final_blog")
             
             # Safe fallback lookup if the dict structure is nested differently
@@ -151,6 +179,9 @@ def stream_blog(blog_id: int, session: Session = Depends(get_session)):
                 db_blog.plan = current_plan
                 db_blog.evidence = current_evidence
                 db_blog.metrics = current_metrics
+                db_blog.latency = round(time.time() - start_time, 2)
+                if final_state and "editor" in final_state:
+                    db_blog.seo_metadata = final_state["editor"].get("seo_metadata", {})
                 current_logs.append("[COMPLETE] Blog generated successfully!")
                 db_blog.logs = current_logs
                 session.add(db_blog)
@@ -175,9 +206,9 @@ def stream_blog(blog_id: int, session: Session = Depends(get_session)):
 @router.get("/")
 def list_blogs(session: Session = Depends(get_session)):
     """
-    List all historically generated blogs from the database.
+    List historically generated blogs from the database.
     """
-    statement = select(Blog).where(Blog.status == "COMPLETED").order_by(Blog.created_at.desc())
+    statement = select(Blog).where(Blog.status.in_(["COMPLETED", "ERROR"])).order_by(Blog.created_at.desc())
     results = session.exec(statement).all()
     return results
 
@@ -190,3 +221,80 @@ def get_blog(blog_id: int, session: Session = Depends(get_session)):
     if not db_blog:
         raise HTTPException(status_code=404, detail="Blog not found")
     return db_blog
+
+class BlogUpdateRequest(BaseModel):
+    markdown_content: str
+
+@router.put("/{blog_id}")
+def update_blog(blog_id: int, payload: BlogUpdateRequest, session: Session = Depends(get_session)):
+    db_blog = session.get(Blog, blog_id)
+    if not db_blog:
+        raise HTTPException(status_code=404, detail="Blog not found")
+    db_blog.markdown_content = payload.markdown_content
+    session.add(db_blog)
+    session.commit()
+    return {"status": "success"}
+
+class BlogRenameRequest(BaseModel):
+    topic: str
+
+@router.put("/{blog_id}/title")
+def rename_blog(blog_id: int, payload: BlogRenameRequest, session: Session = Depends(get_session)):
+    db_blog = session.get(Blog, blog_id)
+    if not db_blog:
+        raise HTTPException(status_code=404, detail="Blog not found")
+    db_blog.topic = payload.topic
+    session.add(db_blog)
+    session.commit()
+    return {"status": "success", "topic": db_blog.topic}
+
+@router.delete("/{blog_id}")
+def delete_blog(blog_id: int, session: Session = Depends(get_session)):
+    db_blog = session.get(Blog, blog_id)
+    if not db_blog:
+        raise HTTPException(status_code=404, detail="Blog not found")
+    session.delete(db_blog)
+    session.commit()
+    return {"status": "success"}
+
+class RegenerateRequest(BaseModel):
+    selected_text: str
+    prompt: str
+    model_name: str = "GPT-4o"
+    full_text: str = ""
+
+@router.post("/{blog_id}/regenerate-selection")
+def regenerate_selection(blog_id: int, payload: RegenerateRequest, session: Session = Depends(get_session)):
+    db_blog = session.get(Blog, blog_id)
+    if not db_blog:
+        raise HTTPException(status_code=404, detail="Blog not found")
+        
+    from langchain_openai import ChatOpenAI
+    from langchain_anthropic import ChatAnthropic
+    from langchain_google_genai import ChatGoogleGenerativeAI
+    from langchain_core.messages import SystemMessage, HumanMessage
+    from app.core.config import settings
+    
+    m = payload.model_name.lower()
+    if "claude" in m:
+        llm = ChatAnthropic(model="claude-sonnet-5", api_key=settings.ANTHROPIC_API_KEY)
+    elif "gemini" in m:
+        llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", api_key=settings.GOOGLE_API_KEY)
+    else:
+        llm = ChatOpenAI(model="gpt-4o", api_key=settings.OPENAI_API_KEY)
+        
+    system_prompt = "You are an expert technical editor. Rewrite the provided selected text based on the user's instructions. Return ONLY the new markdown text. Do not include any conversational filler."
+    
+    human_content = f"User instructions:\n{payload.prompt}\n\n"
+    if payload.full_text:
+        human_content += f"--- FULL BLOG CONTEXT (Do NOT rewrite all of this, just use it for context) ---\n{payload.full_text}\n\n"
+    
+    human_content += f"--- TEXT TO REWRITE (You must ONLY rewrite this specific section) ---\n{payload.selected_text}"
+    
+    response = llm.invoke([
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=human_content)
+    ])
+    
+    new_text = response.content
+    return {"new_text": new_text}
