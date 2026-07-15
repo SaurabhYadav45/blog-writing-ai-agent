@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, X } from 'lucide-react';
 
 interface ConfirmModalProps {
@@ -14,7 +15,7 @@ interface ConfirmModalProps {
 export function ConfirmModal({ isOpen, title, message, onConfirm, onCancel, confirmText = "Confirm", cancelText = "Cancel" }: ConfirmModalProps) {
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <>
       <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[9998]" onClick={onCancel}></div>
       <div className="fixed bg-white shadow-2xl border border-slate-200 rounded-xl z-[9999] overflow-hidden animate-in fade-in zoom-in-95 duration-200" 
@@ -48,6 +49,7 @@ export function ConfirmModal({ isOpen, title, message, onConfirm, onCancel, conf
           </button>
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 }

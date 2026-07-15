@@ -3,15 +3,14 @@
 @plugin "@tailwindcss/typography";
 
 body {
-  @apply bg-orange-50 text-slate-800 antialiased;
-  font-family: 'Outfit', sans-serif;
-  /* Beautiful light orange/white mesh gradient background */
-  background-image: 
-    radial-gradient(at 0% 0%, hsla(28,100%,74%,0.15) 0px, transparent 50%),
-    radial-gradient(at 100% 0%, hsla(18,100%,84%,0.15) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, hsla(38,100%,74%,0.15) 0px, transparent 50%),
-    radial-gradient(at 0% 100%, hsla(8,100%,84%,0.15) 0px, transparent 50%);
+  @apply text-slate-900 antialiased bg-[#FFFAF3];
+  font-family: 'Nunito', sans-serif;
   background-attachment: fixed;
+  min-height: 100vh;
+}
+
+.workspace-font {
+  font-family: 'Outfit', sans-serif;
 }
 
 /* Custom scrollbar for light theme */

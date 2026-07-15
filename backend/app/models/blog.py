@@ -8,7 +8,7 @@ class BlogBase(SQLModel):
     tone: str
     audience: str
     depth: Optional[str] = "Standard Guide"
-    cta: Optional[str] = None
+
     reference_urls: Optional[str] = None
     model_name: Optional[str] = "GPT-4o"
     metrics: Optional[Dict] = Field(default={}, sa_column=Column(JSON))
@@ -17,6 +17,7 @@ class BlogBase(SQLModel):
 
 class Blog(BlogBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: Optional[int] = Field(default=None, foreign_key="user.id")
     mode: Optional[str] = Field(default=None)
     status: str = Field(default="PENDING")
     markdown_content: Optional[str] = Field(default=None)

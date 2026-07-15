@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Sparkles, History, ChevronRight, Trash2, Edit2 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import { ConfigForm } from './ConfigForm';
 import { ConfirmModal } from './ConfirmModal';
 
@@ -13,7 +14,7 @@ interface Blog {
 
 interface SidebarProps {
   onSelectBlog: (id: number) => void;
-  onGenerate: (topic: string, tone: string, audience: string, depth: string, cta: string, referenceUrls: string) => void;
+  onGenerate: (topic: string, tone: string, audience: string, depth: string, referenceUrls: string) => void;
   isGenerating: boolean;
   clearSignal: number;
 }
@@ -21,15 +22,23 @@ interface SidebarProps {
 export function Sidebar({ onSelectBlog, onGenerate, isGenerating, clearSignal }: SidebarProps) {
   const [blogs, setBlogs] = useState<Blog[]>([]);
   const [loading, setLoading] = useState(true);
+  const { token } = useAuth();
   
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [blogToDelete, setBlogToDelete] = useState<number | null>(null);
 
   const fetchBlogs = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/blogs');
+      const response = await fetch('http://localhost:8000/api/blogs', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       const data = await response.json();
-      setBlogs(data);
+      if (Array.isArray(data)) {
+        setBlogs(data);
+      } else {
+        console.error("Expected array but got:", data);
+        setBlogs([]);
+      }
     } catch (error) {
       console.error("Error fetching blogs:", error);
     } finally {
@@ -54,7 +63,10 @@ export function Sidebar({ onSelectBlog, onGenerate, isGenerating, clearSignal }:
   const confirmDelete = async () => {
     if (blogToDelete === null) return;
     try {
-      await fetch(`http://localhost:8000/api/blogs/${blogToDelete}`, { method: 'DELETE' });
+      await fetch(`http://localhost:8000/api/blogs/${blogToDelete}`, { 
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       setBlogs(prev => prev.filter(b => b.id !== blogToDelete));
     } catch (err) {
       console.error(err);
@@ -76,7 +88,10 @@ export function Sidebar({ onSelectBlog, onGenerate, isGenerating, clearSignal }:
     try {
       await fetch(`http://localhost:8000/api/blogs/${id}/title`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ topic: newTopic })
       });
       setBlogs(prev => prev.map(b => b.id === id ? { ...b, topic: newTopic } : b));

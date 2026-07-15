@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     CLOUDINARY_API_KEY: str = ""
     CLOUDINARY_API_SECRET: str = ""
     
+    YOUTUBE_API_KEY: str = ""
+    
     # Load keys from the .env file in the backend directory
     model_config = SettingsConfigDict(
         env_file=".env",

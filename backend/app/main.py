@@ -2,9 +2,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.core.db import init_db
-# Import Blog model to make sure SQLModel registry is aware of it when creating tables
+# Import models to make sure SQLModel registry is aware of them when creating tables
 from app.models.blog import Blog
+from app.models.user import User
 from app.api.routes.blogs import router as blogs_router
+from app.api.routes.auth import router as auth_router
+from app.api.routes.users import router as users_router
 
 # Lifespan manager to execute logic when FastAPI starts up and shuts down
 @asynccontextmanager
@@ -29,8 +32,10 @@ app.add_middleware(
     allow_headers=["*"],  # Allow all request headers
 )
 
-# Register the blog routes under the '/api/blogs' prefix
+# Register routers
+app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(blogs_router, prefix="/api/blogs", tags=["blogs"])
+app.include_router(users_router, prefix="/api/users", tags=["users"])
 
 # Basic health check endpoint
 @app.get("/api/health")

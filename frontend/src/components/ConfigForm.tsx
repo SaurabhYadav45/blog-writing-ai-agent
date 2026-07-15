@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Settings2, Send } from 'lucide-react';
 
 interface ConfigFormProps {
-  onGenerate: (topic: string, tone: string, audience: string, depth: string, cta: string, referenceUrls: string) => void;
+  onGenerate: (topic: string, tone: string, audience: string, depth: string, referenceUrls: string) => void;
   disabled: boolean;
   clearSignal: number;
 }
@@ -12,7 +12,6 @@ export function ConfigForm({ onGenerate, disabled, clearSignal }: ConfigFormProp
   const [tone, setTone] = useState("Story-driven (Engaging)");
   const [audience, setAudience] = useState("Intermediate");
   const [depth, setDepth] = useState("Standard Guide");
-  const [cta, setCta] = useState("");
   const [referenceUrls, setReferenceUrls] = useState("");
 
   useEffect(() => {
@@ -24,7 +23,7 @@ export function ConfigForm({ onGenerate, disabled, clearSignal }: ConfigFormProp
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!topic.trim()) return;
-    onGenerate(topic, tone, audience, depth, cta, referenceUrls);
+    onGenerate(topic, tone, audience, depth, referenceUrls);
   };
 
   return (
@@ -91,19 +90,7 @@ export function ConfigForm({ onGenerate, disabled, clearSignal }: ConfigFormProp
           </select>
         </div>
 
-        <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
-            Call to Action (CTA) <span className="text-slate-400 normal-case font-normal">(Optional)</span>
-          </label>
-          <input
-            type="text"
-            value={cta}
-            onChange={(e) => setCta(e.target.value)}
-            disabled={disabled}
-            placeholder="e.g., Sign up for our newsletter..."
-            className="w-full bg-white/50 border border-orange-200 rounded-lg px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-400 transition-all disabled:opacity-50"
-          />
-        </div>
+
 
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">

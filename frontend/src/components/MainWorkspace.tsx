@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Loader2, Copy, Check, Download, History, Sparkles, Trash2, Edit2, Save } from 'lucide-react';
+import { Loader2, Copy, Check, Download, History, Sparkles, Trash2, Edit2, Save, LayoutDashboard } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -13,6 +14,7 @@ import { MermaidDiagram } from './MermaidDiagram';
 import { TableOfContents } from './TableOfContents';
 import { extractToc } from '../utils/toc';
 import { ConfirmModal } from './ConfirmModal';
+import { useAuth } from '../context/AuthContext';
 
 interface MainWorkspaceProps {
   isGenerating: boolean;
@@ -49,6 +51,7 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
   activeTab,
   setActiveTab
 }: MainWorkspaceProps) => {
+  const { token } = useAuth();
   const [copied, setCopied] = useState(false);
   const [isTocCollapsed, setIsTocCollapsed] = useState(false);
   const [historyBlogs, setHistoryBlogs] = useState<any[]>([]);
@@ -88,7 +91,10 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
     try {
       await fetch(`http://localhost:8000/api/blogs/${selectedBlogId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ markdown_content: editableMarkdown })
       });
       setIsDirty(false);
@@ -150,7 +156,10 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
       
       const res = await fetch(`http://localhost:8000/api/blogs/${selectedBlogId}/regenerate-selection`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
         body: JSON.stringify({
           selected_text: selectedText,
           prompt: regeneratePrompt,
@@ -191,9 +200,18 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
   useEffect(() => {
     if (activeTab === 'History') {
       setLoadingHistory(true);
-      fetch('http://localhost:8000/api/blogs')
+      fetch('http://localhost:8000/api/blogs', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
         .then(res => res.json())
-        .then(data => setHistoryBlogs(data))
+        .then(data => {
+          if (Array.isArray(data)) {
+            setHistoryBlogs(data);
+          } else {
+            console.error("Expected array but got:", data);
+            setHistoryBlogs([]);
+          }
+        })
         .catch(err => console.error(err))
         .finally(() => setLoadingHistory(false));
     }
@@ -208,7 +226,10 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
   const confirmDelete = async () => {
     if (blogToDelete === null) return;
     try {
-      await fetch(`http://localhost:8000/api/blogs/${blogToDelete}`, { method: 'DELETE' });
+      await fetch(`http://localhost:8000/api/blogs/${blogToDelete}`, { 
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       setHistoryBlogs(prev => prev.filter(b => b.id !== blogToDelete));
     } catch (err) {
       console.error(err);
@@ -230,7 +251,10 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
     try {
       await fetch(`http://localhost:8000/api/blogs/${id}/title`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ topic: newTopic })
       });
       setHistoryBlogs(prev => prev.map(b => b.id === id ? { ...b, topic: newTopic } : b));
@@ -576,41 +600,7 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
     // Default to Preview Tab
     return (
       <div className="bg-white rounded-xl p-4 md:py-10 md:pl-10 md:pr-4 shadow-sm border border-slate-100">
-        {finalMarkdown && seoMetadata && Object.keys(seoMetadata).length > 0 && (
-          <div className="mb-8 p-5 bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border border-indigo-100/50 shadow-sm">
-            <h3 className="text-sm font-bold text-indigo-900 mb-3 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
-              SEO Metadata Generated
-            </h3>
-            <div className="grid gap-3">
-              {seoMetadata.slug && (
-                <div className="text-sm">
-                  <span className="font-semibold text-slate-700">Slug: </span>
-                  <span className="font-mono bg-white px-2 py-0.5 rounded text-indigo-700 border border-indigo-100">/{seoMetadata.slug}</span>
-                </div>
-              )}
-              {seoMetadata.meta_description && (
-                <div className="text-sm">
-                  <span className="font-semibold text-slate-700">Description: </span>
-                  <span className="text-slate-600">{seoMetadata.meta_description}</span>
-                </div>
-              )}
-              {seoMetadata.focus_keywords && seoMetadata.focus_keywords.length > 0 && (
-                <div className="text-sm flex gap-2 items-start">
-                  <span className="font-semibold text-slate-700 mt-0.5">Keywords: </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {seoMetadata.focus_keywords.map((kw, i) => (
-                      <span key={i} className="bg-white px-2 py-0.5 rounded-full text-xs font-medium text-slate-600 border border-slate-200">
-                        {kw}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-        
+
         {editableMarkdown ? (
           <div className="flex flex-col lg:flex-row gap-6 max-w-7xl mx-auto items-start">
             <div className="w-full flex-1 min-w-0 transition-all duration-300">
@@ -695,6 +685,41 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
                     .replace(/^>\s*\[!CAUTION\]/gm, '> 🛑 **Caution:**')}
                 </ReactMarkdown>
               </article>
+
+              {finalMarkdown && seoMetadata && Object.keys(seoMetadata).length > 0 && (
+                <div className="mt-12 p-5 bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border border-indigo-100/50 shadow-sm">
+                  <h3 className="text-sm font-bold text-indigo-900 mb-3 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                    SEO Metadata Generated
+                  </h3>
+                  <div className="grid gap-3">
+                    {seoMetadata.slug && (
+                      <div className="text-sm">
+                        <span className="font-semibold text-slate-700">Slug: </span>
+                        <span className="font-mono bg-white px-2 py-0.5 rounded text-indigo-700 border border-indigo-100">/{seoMetadata.slug}</span>
+                      </div>
+                    )}
+                    {seoMetadata.meta_description && (
+                      <div className="text-sm">
+                        <span className="font-semibold text-slate-700">Description: </span>
+                        <span className="text-slate-600">{seoMetadata.meta_description}</span>
+                      </div>
+                    )}
+                    {seoMetadata.focus_keywords && seoMetadata.focus_keywords.length > 0 && (
+                      <div className="text-sm flex gap-2 items-start">
+                        <span className="font-semibold text-slate-700 mt-0.5">Keywords: </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {seoMetadata.focus_keywords.map((kw, i) => (
+                            <span key={i} className="bg-white px-2 py-0.5 rounded-full text-xs font-medium text-slate-600 border border-slate-200">
+                              {kw}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             <div className={`shrink-0 transition-all duration-300 sticky top-4 hidden lg:block ${isTocCollapsed ? 'w-12' : 'w-64'}`}>
               <TableOfContents 
@@ -744,6 +769,14 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
           </div>
           
           <div className="flex items-center gap-4 flex-wrap">
+            <Link 
+              to="/dashboard" 
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-bold bg-white text-orange-600 rounded-lg border border-orange-200 hover:border-orange-400 hover:bg-orange-50 shadow-sm transition-colors"
+            >
+              <LayoutDashboard className="w-4 h-4" />
+              Dashboard
+            </Link>
+
             {isGenerating && (
               <span className="flex items-center gap-1.5 text-xs font-bold text-orange-500 animate-pulse bg-orange-50 px-3 py-1.5 rounded-full border border-orange-100">
                 <Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating...
@@ -752,7 +785,7 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
             
             {/* Model Switcher UI */}
             <div className="flex items-center gap-1 bg-white/60 p-1 rounded-lg border border-slate-200/60 shadow-sm">
-              {['GPT-4o', 'Claude', 'Gemini'].map(model => (
+              {['GPT-5', 'Claude', 'Gemini'].map(model => (
                 <button 
                   key={model}
                   onClick={() => onModelSelect(model)}

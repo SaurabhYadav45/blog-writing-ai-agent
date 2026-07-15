@@ -1,4 +1,5 @@
 from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import MemorySaver
 from typing import TypedDict, Annotated, List, Literal, Optional
 import operator
 from langgraph.types import Send
@@ -20,15 +21,24 @@ import os
 
 os.environ["TAVILY_API_KEY"] = settings.TAVILY_API_KEY
 
-def get_llm(state: dict):
-    model_name = state.get("model_name", "GPT-4o").lower()
+def get_llm(state: dict, expensive: bool = True):
+    model_name = state.get("model_name", "GPT-5.6-Sol").lower()
     
     if "claude" in model_name:
-        return ChatAnthropic(model="claude-sonnet-5", api_key=settings.ANTHROPIC_API_KEY)
+        if expensive:
+            return ChatAnthropic(model="claude-sonnet-5", api_key=settings.ANTHROPIC_API_KEY)
+        else:
+            return ChatAnthropic(model="claude-haiku-4-5-20251001", api_key=settings.ANTHROPIC_API_KEY)
     elif "gemini" in model_name:
-        return ChatGoogleGenerativeAI(model="gemini-1.5-pro", api_key=settings.GOOGLE_API_KEY)
+        if expensive:
+            return ChatGoogleGenerativeAI(model="gemini-3.5-pro", api_key=settings.GOOGLE_API_KEY)
+        else:
+            return ChatGoogleGenerativeAI(model="gemini-3.5-flash", api_key=settings.GOOGLE_API_KEY)
     else:
-        return ChatOpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY)
+        if expensive:
+            return ChatOpenAI(model="gpt-5.6-sol", api_key=settings.OPENAI_API_KEY)
+        else:
+            return ChatOpenAI(model="gpt-5.6-luna", api_key=settings.OPENAI_API_KEY)
 
 def extract_usage(raw, node_name: str, model_name: str):
     usage = getattr(raw, "usage_metadata", None)
@@ -141,7 +151,6 @@ class BlogState(TypedDict):
     topic: str
     model_name: str
     depth: str
-    cta: Optional[str]
     reference_urls: Optional[str]
     
     # routing and research
@@ -198,7 +207,7 @@ def router_node(state: BlogState):
     topic = state["topic"]
     as_of = state.get("as_of", date.today().isoformat())
     model_name = state.get("model_name", "GPT-4o")
-    llm = get_llm(state)
+    llm = get_llm(state, expensive=False)
     decider_llm = llm.with_structured_output(RouterDecision, include_raw=True)
     
     response = decider_llm.invoke(
@@ -280,7 +289,7 @@ If missing or unclear, set published_at=null. Do NOT guess.
 def research_node(state: BlogState) -> dict:
     queries = (state.get("queries", []) or [])
     max_results = 6
-    llm = get_llm(state)
+    llm = get_llm(state, expensive=False)
 
     raw_results: List[dict] = []
     
@@ -576,7 +585,7 @@ Return STRICTLY GlobalImagePlan.
 def decide_images(state: BlogState) -> dict:
     plan = state["plan"]
     assert plan is not None
-    llm = get_llm(state)
+    llm = get_llm(state, expensive=False)
     model_name = state.get("model_name", "GPT-4o")
 
     image_insertion_planner = llm.with_structured_output(GlobalImagePlan, include_raw=True)
@@ -711,20 +720,6 @@ def generate_and_place_images(state: BlogState):
     return {"final_blog": md, "metrics": [metrics_log]}
 
 
-# Compile Reducer Subgraph
-reducer_graph = StateGraph(BlogState)
-reducer_graph.add_node("decide_images", decide_images)
-reducer_graph.add_node("merge_content", merge_content)
-reducer_graph.add_node("generate_and_place_images", generate_and_place_images)
-
-reducer_graph.add_edge(START, "decide_images")
-reducer_graph.add_edge("decide_images", "merge_content")
-reducer_graph.add_edge("merge_content", "generate_and_place_images")
-reducer_graph.add_edge("generate_and_place_images", END)
-
-reducer_subgraph = reducer_graph.compile()
-
-
 class SEOMetadata(BaseModel):
     meta_description: str
     slug: str
@@ -733,15 +728,12 @@ class SEOMetadata(BaseModel):
 class EditorOutput(BaseModel):
     seo_metadata: SEOMetadata
     youtube_embed_html: Optional[str] = Field(default=None, description="If highly relevant, an HTML iframe tag for a YouTube video. Provide ONLY the iframe tag.")
-    cta_paragraph: Optional[str] = Field(default=None, description="A seamlessly woven conclusion paragraph that includes the requested Call to Action (CTA).")
 
 EDITOR_SYSTEM_PROMPT = """You are an expert technical SEO specialist and Editor.
-You will receive the final draft of a blog post, along with a user-provided Call to Action (CTA).
-Your job is to:
-1. Generate structured SEO metadata based on the content (meta_description, slug, focus_keywords).
-2. If a Call to Action (CTA) is provided, write a compelling final conclusion paragraph (`cta_paragraph`) that seamlessly weaves the CTA into the ending of the blog post.
+You will receive the topic and structured outline (plan) for a blog post.
+Your job is to generate structured SEO metadata based on this context (meta_description, slug, focus_keywords).
 
-Return ONLY the metadata and the optional cta paragraph. Do NOT rewrite the entire blog post!
+Return ONLY the metadata. Do NOT rewrite the entire blog post!
 """
 
 def fetch_youtube_video(topic: str) -> str:
@@ -750,7 +742,7 @@ def fetch_youtube_video(topic: str) -> str:
     except ImportError:
         return ""
         
-    api_key = os.getenv("YOUTUBE_API_KEY")
+    api_key = settings.YOUTUBE_API_KEY or os.getenv("YOUTUBE_API_KEY")
     if not api_key:
         print("YOUTUBE_API_KEY not found in .env, skipping YouTube integration.")
         return ""
@@ -790,19 +782,20 @@ def fetch_youtube_video(topic: str) -> str:
         return ""
 
 def editor_node(state: BlogState):
-    llm = get_llm(state)
+    llm = get_llm(state, expensive=False)
     model_name = state.get("model_name", "GPT-4o")
     
-    cta = state.get("cta", "")
-        
     editor = llm.with_structured_output(EditorOutput, include_raw=True)
+    
+    plan = state.get("plan")
+    plan_dict = plan.model_dump() if hasattr(plan, 'model_dump') else dict(plan) if plan else {}
     
     response = editor.invoke(
         [
             SystemMessage(content=EDITOR_SYSTEM_PROMPT),
             HumanMessage(content=(
-                f"CTA to weave into conclusion: {cta}\n\n"
-                f"Blog Content:\n{state.get('final_blog', '')}"
+                f"Blog Topic: {state.get('topic', '')}\n\n"
+                f"Blog Plan / Outline:\n{plan_dict}"
             ))
         ]
     )
@@ -819,15 +812,11 @@ def editor_node(state: BlogState):
             "seo_metadata": {"meta_description": "", "slug": "", "focus_keywords": []},
             "metrics": [metrics_log]
         }
-    
-    # If the AI generated a CTA paragraph, append it
-    if parsed.cta_paragraph:
-        final_blog = f"{final_blog}\n\n## Conclusion\n\n{parsed.cta_paragraph}"
         
-    # Directly fetch and prepend the official YouTube iframe
+    # Directly fetch and append the official YouTube iframe to the end
     youtube_iframe = fetch_youtube_video(state.get("topic", ""))
     if youtube_iframe:
-        final_blog = f"{youtube_iframe}\n\n{final_blog}"
+        final_blog = f"{final_blog}\n\n{youtube_iframe}"
         
     return {
         "final_blog": final_blog,
@@ -845,16 +834,21 @@ builder.add_node("router", router_node)
 builder.add_node("research", research_node)
 builder.add_node("orchestrator", orchestrator_node)
 builder.add_node("worker", worker_node)
-builder.add_node("reducer", reducer_subgraph)
+builder.add_node("decide_images", decide_images)
+builder.add_node("merge_content", merge_content)
+builder.add_node("generate_and_place_images", generate_and_place_images)
 builder.add_node("editor", editor_node)
 
 builder.add_edge(START, "router")
 builder.add_conditional_edges("router", route_next, {"research": "research", "orchestrator": "orchestrator"})
 builder.add_edge("research", "orchestrator")
 builder.add_conditional_edges("orchestrator", fanout, ["worker"])
-builder.add_edge("worker", "reducer")
-builder.add_edge("reducer", "editor")
+builder.add_edge("worker", "decide_images")
+builder.add_edge("decide_images", "merge_content")
+builder.add_edge("merge_content", "generate_and_place_images")
+builder.add_edge("generate_and_place_images", "editor")
 builder.add_edge("editor", END)
 
 # Expose compiled graph to be imported by the FastAPI router
-graph = builder.compile()
+memory = MemorySaver()
+graph = builder.compile(checkpointer=memory)
