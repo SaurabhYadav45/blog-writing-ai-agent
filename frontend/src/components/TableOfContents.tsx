@@ -1,16 +1,24 @@
+/**
+ * Table of Contents (TOC) Component.
+ * Displays a structured side-panel index tracking the headings of the active blog draft.
+ * Automatically synchronizes scroll state using an IntersectionObserver to highlight
+ * the active heading in real-time, and provides smooth scroll behavior on click.
+ */
+
 import React, { useEffect, useState } from 'react';
 import type { TocItem } from '../utils/toc';
 import { List } from 'lucide-react';
 
 interface TableOfContentsProps {
-  toc: TocItem[];
-  isCollapsed?: boolean;
-  onToggle?: () => void;
+  toc: TocItem[];          // Array of heading objects to render
+  isCollapsed?: boolean;  // Toggles collapsing state
+  onToggle?: () => void;   // Triggers collapsable side-panel toggle callback
 }
 
 export const TableOfContents: React.FC<TableOfContentsProps> = ({ toc, isCollapsed = false, onToggle }) => {
   const [activeId, setActiveId] = useState<string>('');
 
+  // Set up IntersectionObserver to update active heading on user scroll
   useEffect(() => {
     if (toc.length === 0 || isCollapsed) return;
 
@@ -23,11 +31,12 @@ export const TableOfContents: React.FC<TableOfContentsProps> = ({ toc, isCollaps
         });
       },
       {
-        rootMargin: '0px 0px -80% 0px',
+        rootMargin: '0px 0px -80% 0px', // Trigger when heading occupies top 20% viewport
         threshold: 1.0,
       }
     );
 
+    // Observe each heading element
     toc.forEach((item) => {
       const element = document.getElementById(item.id);
       if (element) observer.observe(element);
@@ -36,6 +45,7 @@ export const TableOfContents: React.FC<TableOfContentsProps> = ({ toc, isCollaps
     return () => observer.disconnect();
   }, [toc, isCollapsed]);
 
+  // Smooth scroll handler targeting anchor elements
   const handleClick = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
     e.preventDefault();
     const element = document.getElementById(id);
@@ -47,6 +57,7 @@ export const TableOfContents: React.FC<TableOfContentsProps> = ({ toc, isCollaps
 
   if (toc.length === 0) return null;
 
+  // Render a minimal list button icon when collapsed to save space
   if (isCollapsed) {
     return (
       <div className="flex flex-col items-center sticky top-4">
@@ -63,6 +74,7 @@ export const TableOfContents: React.FC<TableOfContentsProps> = ({ toc, isCollaps
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200/60 overflow-hidden relative">
+      {/* Visual left edge orange gradient border */}
       <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-orange-400 to-rose-400"></div>
       
       <div className="p-4 md:p-5 flex items-center justify-between border-b border-slate-100">
@@ -96,6 +108,7 @@ export const TableOfContents: React.FC<TableOfContentsProps> = ({ toc, isCollaps
                 
                 return (
                   <React.Fragment key={item.id}>
+                    {/* Add spacing line breaks between top-level headings */}
                     {isMainTopic && index > 0 && (
                       <div className="border-t border-slate-200/70 my-3 mx-2"></div>
                     )}

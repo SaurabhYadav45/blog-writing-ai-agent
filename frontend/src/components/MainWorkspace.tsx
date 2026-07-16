@@ -15,6 +15,8 @@ import { TableOfContents } from './TableOfContents';
 import { extractToc } from '../utils/toc';
 import { ConfirmModal } from './ConfirmModal';
 import { useAuth } from '../context/AuthContext';
+import { UserProfileDropdown } from './UserProfileDropdown';
+import { ModelDropdown } from './ModelDropdown';
 
 interface MainWorkspaceProps {
   isGenerating: boolean;
@@ -607,7 +609,7 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
               <article className="prose prose-sm md:prose-base lg:prose-lg prose-slate max-w-none prose-headings:font-extrabold prose-a:text-orange-500 prose-img:rounded-xl prose-img:shadow-md prose-table:border prose-table:border-slate-200 prose-th:bg-slate-50 prose-td:p-3 prose-th:p-3 prose-tr:border-b prose-tr:border-slate-100 prose-blockquote:border-l-4 prose-blockquote:border-orange-400 prose-blockquote:bg-orange-50/50 prose-blockquote:py-2 prose-blockquote:px-4 prose-blockquote:rounded-r-lg prose-blockquote:not-italic">
                 <ReactMarkdown 
                   remarkPlugins={[remarkGfm, remarkMath]} 
-                  rehypePlugins={[rehypeRaw, rehypeSanitize, rehypeKatex]}
+                  rehypePlugins={[rehypeRaw, rehypeKatex]}
                   components={{
                     h2({ node, children, ...props }: any) {
                       const text = String(children).replace(/[*_~`]/g, '');
@@ -755,7 +757,7 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
   return (
     <div className="flex-1 flex flex-col h-screen overflow-hidden">
       {/* Narrow Header */}
-      <header className="glass-panel border-b-0 rounded-b-xl md:rounded-b-2xl pt-4 md:pt-6 pb-4 md:pb-5 px-4 md:px-10 flex-shrink-0 relative z-10 overflow-hidden shadow-sm">
+      <header className="glass-panel border-b-0 rounded-b-xl md:rounded-b-2xl pt-4 md:pt-6 pb-4 md:pb-5 px-4 md:px-10 flex-shrink-0 relative z-10 shadow-sm">
         <div className="absolute top-0 right-0 -mr-10 md:-mr-20 -mt-10 md:-mt-20 w-32 md:w-48 h-32 md:h-48 bg-orange-400/20 rounded-full blur-2xl"></div>
         
         <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -769,14 +771,6 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
           </div>
           
           <div className="flex items-center gap-4 flex-wrap">
-            <Link 
-              to="/dashboard" 
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-bold bg-white text-orange-600 rounded-lg border border-orange-200 hover:border-orange-400 hover:bg-orange-50 shadow-sm transition-colors"
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              Dashboard
-            </Link>
-
             {isGenerating && (
               <span className="flex items-center gap-1.5 text-xs font-bold text-orange-500 animate-pulse bg-orange-50 px-3 py-1.5 rounded-full border border-orange-100">
                 <Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating...
@@ -784,22 +778,10 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
             )}
             
             {/* Model Switcher UI */}
-            <div className="flex items-center gap-1 bg-white/60 p-1 rounded-lg border border-slate-200/60 shadow-sm">
-              {['GPT-5', 'Claude', 'Gemini'].map(model => (
-                <button 
-                  key={model}
-                  onClick={() => onModelSelect(model)}
-                  className={`cursor-pointer px-2.5 py-1 text-xs font-bold rounded-md transition-all ${
-                    selectedModel === model 
-                      ? 'bg-white text-slate-800 shadow-sm border border-slate-200' 
-                      : 'text-slate-500 hover:text-slate-700 hover:bg-white/50 border border-transparent'
-                  }`}
-                >
-                  {model}
-                </button>
-              ))}
-            </div>
+            <ModelDropdown selectedModel={selectedModel} onModelSelect={onModelSelect} />
 
+            {/* User Profile Dropdown */}
+            <UserProfileDropdown />
           </div>
         </div>
       </header>

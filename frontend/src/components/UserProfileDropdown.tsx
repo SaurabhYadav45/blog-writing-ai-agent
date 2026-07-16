@@ -37,7 +37,7 @@ export const UserProfileDropdown = () => {
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 px-3 py-2 rounded-full border border-orange-100 bg-white shadow-sm hover:shadow-md transition-all group"
       >
-        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-orange-400 to-orange-600 flex items-center justify-center text-white font-bold text-sm shadow-inner">
+        <div className="w-8 h-8 rounded-full bg-linear-to-tr from-orange-400 to-orange-600 flex items-center justify-center text-white font-bold text-sm shadow-inner">
           {displayName.charAt(0).toUpperCase()}
         </div>
         <span className="text-sm font-semibold text-gray-700 hidden sm:block">{displayName}</span>

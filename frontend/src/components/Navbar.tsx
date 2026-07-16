@@ -29,9 +29,7 @@ export const Navbar = () => {
           <a href="/#features" className="hover:text-[#FF4500] transition-colors">Features</a>
           <a href="/#how-it-works" className="hover:text-[#FF4500] transition-colors">How it works</a>
           <a href="/#pricing" className="hover:text-[#FF4500] transition-colors">Pricing</a>
-          {isAuthenticated && (
-            <Link to="/workspace" className={`hover:text-[#FF4500] transition-colors ${location.pathname === '/workspace' ? 'text-[#FF4500]' : ''}`}>Workspace</Link>
-          )}
+          <Link to="/workspace" className={`hover:text-[#FF4500] transition-colors ${location.pathname === '/workspace' ? 'text-[#FF4500]' : ''}`}>Workspace</Link>
         </div>
         <div className="flex items-center gap-4">
           {isAuthenticated ? (

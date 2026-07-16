@@ -1,19 +1,28 @@
+/**
+ * Blog Generation Configuration Form.
+ * Captures user choices for blog topic, targeted reader audience, writing tone,
+ * generation depth/complexity, and arbitrary external research urls.
+ * Triggers the onGenerate callback with these parameters to kick off graph execution.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { Settings2, Send } from 'lucide-react';
 
 interface ConfigFormProps {
   onGenerate: (topic: string, tone: string, audience: string, depth: string, referenceUrls: string) => void;
-  disabled: boolean;
-  clearSignal: number;
+  disabled: boolean;       // Lock inputs during active generation runs
+  clearSignal: number;    // Numeric trigger to reset inputs (e.g. on new generation start)
 }
 
 export function ConfigForm({ onGenerate, disabled, clearSignal }: ConfigFormProps) {
+  // Input states with sensible development defaults
   const [topic, setTopic] = useState("");
   const [tone, setTone] = useState("Story-driven (Engaging)");
   const [audience, setAudience] = useState("Intermediate");
   const [depth, setDepth] = useState("Standard Guide");
   const [referenceUrls, setReferenceUrls] = useState("");
 
+  // Clear inputs when the clearSignal increments
   useEffect(() => {
     if (clearSignal > 0) {
       setTopic("");
@@ -28,12 +37,15 @@ export function ConfigForm({ onGenerate, disabled, clearSignal }: ConfigFormProp
 
   return (
     <div className="glass-panel rounded-xl overflow-hidden mt-2 mb-8">
+      {/* Header bar */}
       <div className="bg-orange-50/50 p-4 border-b border-orange-200/50 flex items-center gap-2">
         <Settings2 className="w-4 h-4 text-orange-600" />
         <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wider">Generation Settings</h2>
       </div>
       
+      {/* Settings Form */}
       <form onSubmit={handleSubmit} className="p-5 space-y-5">
+        {/* Topic Input */}
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
             Blog Topic
@@ -48,6 +60,7 @@ export function ConfigForm({ onGenerate, disabled, clearSignal }: ConfigFormProp
           />
         </div>
 
+        {/* Audience Selector */}
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Audience</label>
           <select
@@ -62,6 +75,7 @@ export function ConfigForm({ onGenerate, disabled, clearSignal }: ConfigFormProp
           </select>
         </div>
         
+        {/* Tone Selector */}
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Tone</label>
           <select
@@ -76,6 +90,7 @@ export function ConfigForm({ onGenerate, disabled, clearSignal }: ConfigFormProp
           </select>
         </div>
 
+        {/* Outline Depth Selector */}
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Depth / Complexity</label>
           <select
@@ -90,8 +105,7 @@ export function ConfigForm({ onGenerate, disabled, clearSignal }: ConfigFormProp
           </select>
         </div>
 
-
-
+        {/* Reference URLs Input */}
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
             Reference URLs <span className="text-slate-400 normal-case font-normal">(Optional, comma separated)</span>
@@ -106,6 +120,7 @@ export function ConfigForm({ onGenerate, disabled, clearSignal }: ConfigFormProp
           />
         </div>
 
+        {/* Action Button */}
         <button
           type="submit"
           disabled={disabled || !topic.trim()}

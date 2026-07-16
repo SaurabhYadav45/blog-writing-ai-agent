@@ -1,25 +1,37 @@
+/**
+ * General Confirmation Modal.
+ * Renders a customizable overlay modal via React Portal at the end of the document body.
+ * Primarily used to warn users before performing destructive actions (like deleting a blog).
+ */
+
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, X } from 'lucide-react';
 
 interface ConfirmModalProps {
-  isOpen: boolean;
-  title: string;
-  message: string;
-  onConfirm: () => void;
-  onCancel: () => void;
-  confirmText?: string;
-  cancelText?: string;
+  isOpen: boolean;      // Toggles modal visibility
+  title: string;        // Header title of the modal
+  message: string;      // Body warning message
+  onConfirm: () => void; // Triggered when clicking confirm button
+  onCancel: () => void;  // Triggered when clicking cancel/close button
+  confirmText?: string;  // Confirm button label (default: "Confirm")
+  cancelText?: string;   // Cancel button label (default: "Cancel")
 }
 
 export function ConfirmModal({ isOpen, title, message, onConfirm, onCancel, confirmText = "Confirm", cancelText = "Cancel" }: ConfirmModalProps) {
   if (!isOpen) return null;
 
+  // Render modal elements inside HTML body using React Portal to prevent layout overlapping
   return createPortal(
     <>
+      {/* Blurred overlay background */}
       <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[9998]" onClick={onCancel}></div>
+      
+      {/* Modal Dialog */}
       <div className="fixed bg-white shadow-2xl border border-slate-200 rounded-xl z-[9999] overflow-hidden animate-in fade-in zoom-in-95 duration-200" 
            style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '90%', maxWidth: '400px' }}>
+        
+        {/* Header section with alert icon */}
         <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-red-600">
@@ -31,9 +43,13 @@ export function ConfirmModal({ isOpen, title, message, onConfirm, onCancel, conf
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Warning text content */}
         <div className="p-6">
           <p className="text-slate-600 text-sm leading-relaxed">{message}</p>
         </div>
+
+        {/* Actions bar */}
         <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
           <button 
             onClick={onCancel}

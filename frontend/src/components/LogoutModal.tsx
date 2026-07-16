@@ -1,17 +1,24 @@
+/**
+ * Logout Confirmation Modal.
+ * Renders an animated confirmation dialogue utilizing framer-motion.
+ * Ported into the end of document.body.
+ */
+
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LogOut, X } from 'lucide-react';
 
 interface LogoutModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
+  isOpen: boolean;      // Toggles modal visibility
+  onClose: () => void;   // Triggers close callback
+  onConfirm: () => void; // Triggers signout callback
 }
 
 export const LogoutModal: React.FC<LogoutModalProps> = ({ isOpen, onClose, onConfirm }) => {
   const [mounted, setMounted] = useState(false);
   
+  // Track mount state to ensure portal works nicely with server-side setups
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -22,6 +29,7 @@ export const LogoutModal: React.FC<LogoutModalProps> = ({ isOpen, onClose, onCon
     <AnimatePresence>
       {isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          {/* Blurred backdrop with close trigger */}
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -29,6 +37,8 @@ export const LogoutModal: React.FC<LogoutModalProps> = ({ isOpen, onClose, onCon
             className="absolute inset-0 bg-black/20 backdrop-blur-sm"
             onClick={onClose}
           />
+          
+          {/* Modal Panel */}
           <motion.div 
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
