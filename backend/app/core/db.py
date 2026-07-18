@@ -6,6 +6,9 @@ and dependency injection of database sessions into API routes.
 """
 
 from sqlmodel import create_engine, Session, SQLModel
+from app.models.user import User
+from app.models.blog import Blog
+from app.models.payment import PaymentTransaction
 from app.core.config import settings
 
 # Create the DB Engine using our DATABASE_URL setting.

@@ -1,25 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
+import { MODEL_NAMES } from '../config/models';
 import { 
-  Bot, Zap, FileText, CheckCircle2,
+  Bot, Zap, FileText,
   MessageSquare, Search, ListChecks, Edit3, Sparkles,
   Check, X, Star, Shield, ChevronDown
 } from 'lucide-react';
 import { Navbar } from '../components/Navbar';
 
 export const Home = () => {
-  const [isYearly, setIsYearly] = useState(true);
+  const { token } = useAuth();
   const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const [isScrolled, setIsScrolled] = useState(false);
 
-  useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 20);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+
 
   return (
     <div className="flex flex-col items-center bg-[#FFFAF3]">
@@ -347,9 +342,9 @@ export const Home = () => {
                 <ul className="space-y-3 mb-8 text-left w-full max-w-[260px] flex-1">
                   {[
                     { text: "3 AI Blogs per month", included: true },
-                    { text: "Standard GPT-4o model", included: true },
+                    { text: `${MODEL_NAMES.GPT_CHEAP} model`, included: true },
                     { text: "Basic web research", included: true },
-                    { text: "Claude 3.5 Sonnet access", included: false },
+                    { text: `${MODEL_NAMES.CLAUDE_CHEAP} access`, included: false },
                     { text: "Custom Image Generation", included: false },
                     { text: "Priority Support", included: false },
                   ].map((item, i) => (
@@ -389,9 +384,9 @@ export const Home = () => {
                   <ul className="space-y-3 mb-8 text-left w-full max-w-[260px] flex-1">
                     {[
                       { text: "Unlimited AI Blogs", included: true },
-                      { text: "Standard GPT-5 model", included: true },
+                      { text: `${MODEL_NAMES.GPT_EXPENSIVE} model`, included: true },
                       { text: "Deep web research", included: true },
-                      { text: "Claude 5 Sonnet access", included: true },
+                      { text: `${MODEL_NAMES.CLAUDE_EXPENSIVE} access`, included: true },
                       { text: "Custom Image Generation", included: true },
                       { text: "Priority Support", included: true },
                     ].map((item, i) => (
@@ -401,7 +396,10 @@ export const Home = () => {
                       </li>
                     ))}
                   </ul>
-                  <Link to="/login" className="w-full py-3.5 rounded-full text-white font-bold shadow-[0_4px_14px_rgba(249,115,22,0.3)] hover:shadow-[0_6px_20px_rgba(249,115,22,0.4)] transition-all hover:-translate-y-0.5 bg-gradient-to-r from-[#ffae7a] to-[#ff6600] flex items-center justify-center gap-2">
+                  <Link 
+                    to={token ? "/settings?upgrade=true" : "/login"} 
+                    className="w-full py-3.5 rounded-full text-white font-bold shadow-[0_4px_14px_rgba(249,115,22,0.3)] hover:shadow-[0_6px_20px_rgba(249,115,22,0.4)] transition-all hover:-translate-y-0.5 bg-gradient-to-r from-orange-400 to-orange-500 flex items-center justify-center gap-2 cursor-pointer"
+                  >
                     <Shield className="w-4 h-4" /> Upgrade to Pro
                   </Link>
                 </div>
@@ -414,7 +412,7 @@ export const Home = () => {
       {/* 5. FAQ Section */}
       <section id="faq" className="w-full max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-24 mb-10">
         <h2 className="text-3xl md:text-4xl font-bold tracking-tighter text-gray-900 mb-12 text-center">Frequently Asked Questions</h2>
-        <div className="space-y-4">
+        <div className="space-y-1">
           {[
             { 
               q: "What makes BlogFusion different from standard ChatGPT?", 
@@ -439,7 +437,7 @@ export const Home = () => {
           ].map((faq, i) => (
             <motion.div 
               key={i} 
-              className={`bg-white rounded-[24px] shadow-sm border overflow-hidden transition-all duration-300 ${openFaq === i ? 'border-orange-200' : 'border-orange-50 hover:border-orange-100 hover:shadow-md'}`}
+              className={`bg-white  shadow-sm border overflow-hidden transition-all duration-300 ${openFaq === i ? 'border-orange-200' : 'border-orange-50 hover:border-orange-100 hover:shadow-md'}`}
               initial={{ opacity: 0, y: 15 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
@@ -447,7 +445,7 @@ export const Home = () => {
             >
               <button 
                 onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                className="w-full px-6 py-4 flex items-center justify-between text-left focus:outline-none"
+                className="w-full px-6 py-3 flex items-center justify-between text-left focus:outline-none"
               >
                 <h3 className={`text-base font-semibold transition-colors duration-300 ${openFaq === i ? 'text-[#FF4500]' : 'text-gray-900'}`}>
                   {faq.q}
@@ -457,7 +455,7 @@ export const Home = () => {
                   transition={{ duration: 0.3 }}
                   className={`flex-shrink-0 ml-4 p-1 rounded-full ${openFaq === i ? 'bg-orange-100 text-[#FF4500]' : 'bg-gray-50 text-gray-400'}`}
                 >
-                  <ChevronDown className="w-4 h-4" />
+                  <ChevronDown className="w-4 h-4 cursor-pointer" />
                 </motion.div>
               </button>
               
@@ -482,7 +480,7 @@ export const Home = () => {
 
       {/* 6. Footer */}
       <footer 
-        className="w-full relative pt-40 pb-16 mt-auto"
+        className="w-full relative pt-10 pb-16 mt-auto"
         style={{
             backgroundImage: `url(/Footer.png)`,
             backgroundSize: 'cover',
@@ -490,6 +488,14 @@ export const Home = () => {
             backgroundRepeat: 'no-repeat'
         }}
       >
+        <div className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'>
+          <Link to="/" className="flex items-center gap-2">
+            <img src="/icon.png" alt="icon" className="w-8 h-8 rounded-lg shadow-sm object-cover" />
+            <span className="font-extrabold text-xl tracking-tight text-gray-900">
+              BlogFusion
+            </span>
+          </Link>
+        </div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-end mt-12">
           {/* Left Side: Watermark & Copyright */}
           <div className="flex flex-col mb-8 md:mb-0">

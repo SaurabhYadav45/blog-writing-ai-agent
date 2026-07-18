@@ -5,7 +5,6 @@
  * to restrict unauthorized page visits.
  */
 
-import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { PublicLayout } from './layouts/PublicLayout';
@@ -18,11 +17,14 @@ import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { Dashboard } from './pages/Dashboard';
 import { Workspace } from './pages/Workspace';
+import { Settings } from './pages/Settings';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 
 function App() {
   return (
-    <AuthProvider>
-      <Router>
+    <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || 'YOUR_GOOGLE_CLIENT_ID'}>
+      <AuthProvider>
+        <Router>
         <Routes>
           {/* Public Landing Pages (Accessible to everyone) */}
           <Route element={<PublicLayout />}>
@@ -39,6 +41,7 @@ function App() {
           <Route element={<ProtectedRoute />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/workspace" element={<Workspace />} />
+            <Route path="/settings" element={<Settings />} />
           </Route>
 
           {/* Fallback Catch-All Route: Redirects unrecognized paths back to Home */}
@@ -46,6 +49,7 @@ function App() {
         </Routes>
       </Router>
     </AuthProvider>
+    </GoogleOAuthProvider>
   );
 }
 

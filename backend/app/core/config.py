@@ -6,6 +6,7 @@ AI model API keys, Cloudinary image upload services, and YouTube media lookups.
 """
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Optional
 
 class Settings(BaseSettings):
     """
@@ -15,6 +16,19 @@ class Settings(BaseSettings):
     
     # Database Connection URL (e.g. PostgreSQL connection string)
     DATABASE_URL: str
+    
+    # Security Configuration settings
+    SECRET_KEY: str = "super_secret_key_change_me_in_production"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # Default expiration: 7 days
+    
+    # OAuth Configurations
+    GOOGLE_CLIENT_ID: Optional[str] = None
+    
+    # Razorpay Payment Gateway Configurations
+    RAZORPAY_KEY_ID: str = ""
+    RAZORPAY_KEY_SECRET: str = ""
+
     
     # API Keys for AI Services
     OPENAI_API_KEY: str     # OpenAI API Key (used for GPT models)

@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Sparkles, Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { login as loginApi, googleLogin as googleLoginApi } from '../services/auth';
+import { GoogleLogin } from '@react-oauth/google';
 
 export const Login = () => {
   const [email, setEmail] = useState('');
@@ -21,13 +23,7 @@ export const Login = () => {
       formData.append('username', email);
       formData.append('password', password);
 
-      const response = await fetch('http://localhost:8000/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: formData,
-      });
+      const response = await loginApi(formData);
 
       const data = await response.json();
 
@@ -35,6 +31,24 @@ export const Login = () => {
         throw new Error(data.detail || 'Failed to login');
       }
 
+      login(data.access_token);
+      navigate('/dashboard');
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleSuccess = async (credentialResponse: any) => {
+    setError('');
+    setIsLoading(true);
+    try {
+      if (!credentialResponse.credential) throw new Error("No credential received");
+      const response = await googleLoginApi(credentialResponse.credential);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Failed to login with Google');
+      
       login(data.access_token);
       navigate('/dashboard');
     } catch (err: any) {
@@ -112,6 +126,22 @@ export const Login = () => {
               {!isLoading && <ArrowRight className="w-4 h-4" />}
             </button>
           </form>
+
+          <div className="mt-6 flex items-center justify-center">
+            <div className="w-full h-px bg-slate-200"></div>
+            <span className="px-4 text-sm text-slate-500 bg-white/0 relative z-10 font-medium">OR</span>
+            <div className="w-full h-px bg-slate-200"></div>
+          </div>
+
+          <div className="mt-6 flex justify-center">
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={() => setError('Google Login Failed')}
+              useOneTap
+              theme="outline"
+              shape="pill"
+            />
+          </div>
 
           <div className="mt-8 text-center">
             <p className="text-sm text-slate-600">

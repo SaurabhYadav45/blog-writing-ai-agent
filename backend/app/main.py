@@ -8,8 +8,10 @@ from app.models.user import User
 from app.api.routes.blogs import router as blogs_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.users import router as users_router
+from app.api.routes.payments import router as payments_router
 
 # Lifespan manager to execute logic when FastAPI starts up and shuts down
+# The @asynccontextmanager is a decorator, It lets you turn a simple function into a context manager using a single yield statement. The yield acts as a dividing line:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Initializes tables in PostgreSQL database
@@ -36,6 +38,7 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(blogs_router, prefix="/api/blogs", tags=["blogs"])
 app.include_router(users_router, prefix="/api/users", tags=["users"])
+app.include_router(payments_router, prefix="/api/payments", tags=["payments"])
 
 # Basic health check endpoint
 @app.get("/api/health")

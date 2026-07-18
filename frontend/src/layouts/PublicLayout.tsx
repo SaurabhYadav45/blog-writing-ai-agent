@@ -4,7 +4,6 @@
  * for unauthenticated public pages. Renders matching child endpoints via Outlet.
  */
 
-import React from 'react';
 import { Outlet } from 'react-router-dom';
 
 export const PublicLayout = () => {

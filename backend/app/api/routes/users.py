@@ -8,10 +8,10 @@ and compiling data for Recharts visualizations (30-day activity, content categor
 from fastapi import APIRouter, Depends
 from sqlmodel import Session, select
 from app.core.db import get_session
-from app.models.user import User, UserPublic
+from app.models.user import User, UserPublic, UserUpdate
 from app.models.blog import Blog
 from app.api.deps import get_current_user
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 router = APIRouter()
 
@@ -20,6 +20,30 @@ def read_users_me(current_user: User = Depends(get_current_user)):
     """
     Retrieve details of the currently authenticated user.
     """
+    return current_user
+
+@router.put("/me", response_model=UserPublic)
+def update_user_me(
+    user_in: UserUpdate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Update the current user's profile information.
+    """
+    from fastapi import HTTPException
+    
+    user_data = user_in.model_dump(exclude_unset=True)
+    
+    if "brand_persona" in user_data and user_data["brand_persona"] and current_user.plan_name != "Pro":
+        raise HTTPException(status_code=403, detail="Custom Brand Persona is a Pro feature.")
+        
+    for key, value in user_data.items():
+        setattr(current_user, key, value)
+        
+    session.add(current_user)
+    session.commit()
+    session.refresh(current_user)
     return current_user
 
 @router.get("/me/dashboard")
@@ -55,7 +79,7 @@ def get_user_dashboard(current_user: User = Depends(get_current_user), session: 
     completed_blogs_count = 0
     
     # Define date threshold for last 30 days
-    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
     activity_map = {}
     
     for i, blog in enumerate(blogs):
@@ -78,8 +102,12 @@ def get_user_dashboard(current_user: User = Depends(get_current_user), session: 
             completed_blogs_count += 1
             
         # Map blogs to created date (for the 30-day activity chart)
-        if blog.created_at >= thirty_days_ago:
-            date_str = blog.created_at.strftime("%b %d")
+        blog_created_at = blog.created_at
+        if blog_created_at.tzinfo is None:
+            blog_created_at = blog_created_at.replace(tzinfo=timezone.utc)
+            
+        if blog_created_at >= thirty_days_ago:
+            date_str = blog_created_at.strftime("%b %d")
             activity_map[date_str] = activity_map.get(date_str, 0) + 1
             
         # Extract the style / topic category determined by the AI
@@ -103,17 +131,19 @@ def get_user_dashboard(current_user: User = Depends(get_current_user), session: 
     # Generate contiguous 30-day timeline ensuring zero-activity days are populated
     activity_chart_data = []
     for d in range(29, -1, -1):
-        dt = datetime.utcnow() - timedelta(days=d)
+        dt = datetime.now(timezone.utc) - timedelta(days=d)
         ds = dt.strftime("%b %d")
         activity_chart_data.append({"date": ds, "blogs": activity_map.get(ds, 0)})
     
     time_saved_hours = total_blogs_generated * 3
     avg_words = int(total_words / completed_blogs_count) if completed_blogs_count > 0 else 0
     
+    total_credits_capacity = max(current_user.credits, 55 if current_user.plan_name == "Pro" else 5)
+    
     return {
         "current_plan": current_user.plan_name,
         "remaining_credits": current_user.credits,
-        "total_credits_per_account": 5,
+        "total_credits_per_account": total_credits_capacity,
         "total_blogs_generated": total_blogs_generated,
         "total_tokens_processed": total_tokens,
         "time_saved_hours": time_saved_hours,

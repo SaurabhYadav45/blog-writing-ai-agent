@@ -4,7 +4,6 @@
  * Primarily used to warn users before performing destructive actions (like deleting a blog).
  */
 
-import React from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, X } from 'lucide-react';
 

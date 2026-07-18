@@ -10,22 +10,16 @@
  * - A horizontal grid displaying the top 5 latest draft blogs with fast "Open Blog" links.
  */
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { getDashboard } from '../services/users';
 import { Link, useNavigate } from 'react-router-dom';
-import { Sparkles, Zap, Layers, FileText, Bot, Clock, Cpu, ArrowRight, AlertTriangle, Type } from 'lucide-react';
+import { Sparkles, Zap, Layers, FileText, Bot, Clock, Cpu, ArrowRight, AlertTriangle, Type, Crown } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Navbar } from '../components/Navbar';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 
-// Theme color schemes for Recharts charts
 const COLORS = ['#f97316', '#3b82f6', '#10b981', '#8b5cf6', '#ef4444'];
-const STATUS_COLORS = {
-  PENDING: '#f59e0b',
-  COMPLETED: '#10b981',
-  DONE: '#10b981',
-  ERROR: '#ef4444'
-};
 
 export const Dashboard = () => {
   const { user, token } = useAuth();
@@ -37,11 +31,7 @@ export const Dashboard = () => {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/users/me/dashboard', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
+        const response = await getDashboard(token || '');
         if (response.ok) {
           const data = await response.json();
           setStats(data);
@@ -92,7 +82,11 @@ export const Dashboard = () => {
               <h3 className="text-red-800 font-bold">You are running low on credits!</h3>
               <p className="text-red-600 text-sm mt-1">You only have {stats?.remaining_credits} credits left. Upgrade to our Pro plan to continue generating high-quality blogs without interruption.</p>
             </div>
-            <button className="ml-auto px-5 py-2 bg-red-600 text-white text-sm font-bold rounded-xl shadow-sm hover:bg-red-700 transition-colors whitespace-nowrap cursor-pointer">
+            <button 
+              onClick={() => navigate('/settings?upgrade=true')}
+              className="ml-auto flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-orange-400 to-orange-500 text-white text-sm font-bold rounded-xl hover:from-orange-500 hover:to-orange-600 transition-all shadow-md shadow-orange-500/20 whitespace-nowrap cursor-pointer"
+            >
+              <Crown className="w-4 h-4 fill-white" />
               Upgrade Now
             </button>
           </motion.div>
@@ -133,13 +127,29 @@ export const Dashboard = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="bg-white p-6 rounded-[24px] shadow-sm border border-orange-100 hover:border-orange-300 transition-colors"
+            className="bg-white p-6 rounded-[24px] shadow-sm border border-orange-100 hover:border-orange-300 transition-colors flex flex-col justify-between"
           >
-            <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center mb-4 text-orange-500">
-              <Layers size={20} />
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center mb-4 text-orange-500">
+                <Layers size={20} />
+              </div>
+              <p className="text-xs font-semibold text-gray-500 tracking-wider uppercase mb-1">Current Plan</p>
+              <h2 className="text-2xl font-bold text-gray-900">{stats?.current_plan || 'Free'}</h2>
+              {stats?.current_plan === 'Pro' && user?.plan_expires_at && (
+                <p className="text-xs text-orange-600 font-medium mt-1">
+                  Expires {new Date(user.plan_expires_at).toLocaleDateString()}
+                </p>
+              )}
             </div>
-            <p className="text-xs font-semibold text-gray-500 tracking-wider uppercase mb-1">Current Plan</p>
-            <h2 className="text-2xl font-bold text-gray-900">{stats?.current_plan || 'Free'}</h2>
+            
+            {stats?.current_plan === 'Free' && (
+              <Link 
+                to="/settings?upgrade=true"
+                className="mt-4 flex items-center gap-1.5 text-xs font-bold text-orange-500 hover:text-orange-600 transition-colors cursor-pointer"
+              >
+                Upgrade to Pro <ArrowRight size={14} />
+              </Link>
+            )}
           </motion.div>
 
           {/* Credits Counter with custom percentage bar */}
@@ -270,7 +280,7 @@ export const Dashboard = () => {
                       paddingAngle={5}
                       dataKey="value"
                     >
-                      {stats.kind_chart_data.map((entry: any, index: number) => (
+                      {stats.kind_chart_data.map((_entry: any, index: number) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>

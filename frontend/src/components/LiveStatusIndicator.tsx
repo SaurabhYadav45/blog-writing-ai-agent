@@ -5,7 +5,6 @@
  * Employs animated spinners and glow effects to show the currently active step.
  */
 
-import React from 'react';
 import { Network, Search, ListTree, PenTool, CheckCircle, Loader2 } from 'lucide-react';
 
 interface LiveStatusIndicatorProps {

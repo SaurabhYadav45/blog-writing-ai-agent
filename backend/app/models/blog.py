@@ -9,7 +9,8 @@ performance metrics, and user ownership.
 from sqlmodel import SQLModel, Field
 from sqlalchemy import Column, JSON
 from typing import Optional, Dict, List
-from datetime import datetime
+from datetime import datetime, timezone
+from app.core import llm_models
 
 class BlogBase(SQLModel):
     """
@@ -22,7 +23,7 @@ class BlogBase(SQLModel):
     depth: Optional[str] = "Standard Guide"
 
     reference_urls: Optional[str] = None
-    model_name: Optional[str] = "GPT-4o"
+    model_name: Optional[str] = llm_models.FAMILY_GPT
     
     # Store dynamic dictionaries/JSON fields inside database columns
     metrics: Optional[Dict] = Field(default={}, sa_column=Column(JSON))
@@ -41,12 +42,15 @@ class Blog(BlogBase, table=True):
     status: str = Field(default="PENDING")  # Status states: PENDING, COMPLETED, ERROR
     markdown_content: Optional[str] = Field(default=None)
     
+    published_url: Optional[str] = Field(default=None)
+    cms_platform: Optional[str] = Field(default=None)
+    
     # Complex outline plans, search evidence links, and agent run logs
     plan: Optional[Dict] = Field(default={}, sa_column=Column(JSON))
     evidence: Optional[List] = Field(default=[], sa_column=Column(JSON))
     logs: Optional[List] = Field(default=[], sa_column=Column(JSON))
     
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class BlogCreate(BlogBase):
     """

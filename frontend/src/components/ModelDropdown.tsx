@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Bot, Cpu, Sparkles } from 'lucide-react';
+import { ChevronDown, Bot, Cpu, Sparkles, Crown } from 'lucide-react';
+import { MODEL_NAMES } from '../config/models';
+import { useAuth } from '../context/AuthContext';
+import { UpgradeModal } from './UpgradeModal';
 
 interface ModelDropdownProps {
   selectedModel: string;
@@ -9,7 +12,9 @@ interface ModelDropdownProps {
 
 export const ModelDropdown: React.FC<ModelDropdownProps> = ({ selectedModel, onModelSelect }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuth();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -22,9 +27,18 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({ selectedModel, onM
   }, []);
 
   const models = [
-    { id: 'GPT-5', icon: Bot, desc: 'Most Capable' },
-    { id: 'Claude', icon: Cpu, desc: 'Best Reasoning' },
-    { id: 'Gemini', icon: Sparkles, desc: 'Fastest' }
+    { id: MODEL_NAMES.GPT_EXPENSIVE, icon: Bot, desc: 'Most Capable' },
+    { id: MODEL_NAMES.GPT_CHEAP, icon: Bot, desc: 'Cost-Efficient' },
+    { id: MODEL_NAMES.CLAUDE_EXPENSIVE, icon: Cpu, desc: 'Best Reasoning' },
+    { id: MODEL_NAMES.CLAUDE_CHEAP, icon: Cpu, desc: 'High-Volume' },
+    { id: MODEL_NAMES.GEMINI_EXPENSIVE, icon: Sparkles, desc: 'Advanced Logic' },
+    { id: MODEL_NAMES.GEMINI_CHEAP, icon: Sparkles, desc: 'Fastest' }
+  ];
+
+  const premiumModels = [
+    MODEL_NAMES.GPT_EXPENSIVE,
+    MODEL_NAMES.CLAUDE_EXPENSIVE,
+    MODEL_NAMES.GEMINI_EXPENSIVE
   ];
 
   const currentModel = models.find(m => m.id === selectedModel) || models[0];
@@ -55,6 +69,11 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({ selectedModel, onM
                 <button
                   key={model.id}
                   onClick={() => {
+                    if (premiumModels.includes(model.id) && user?.plan_name !== 'Pro') {
+                      setIsOpen(false);
+                      setShowUpgradeModal(true);
+                      return;
+                    }
                     onModelSelect(model.id);
                     setIsOpen(false);
                   }}
@@ -66,7 +85,12 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({ selectedModel, onM
                 >
                   <model.icon size={16} className={selectedModel === model.id ? 'text-orange-500' : 'text-slate-400'} />
                   <div className="text-left flex-1">
-                    <div className="block">{model.id}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="block">{model.id}</span>
+                      {premiumModels.includes(model.id) && (
+                        <Crown size={12} className="text-amber-500 fill-amber-500/20" />
+                      )}
+                    </div>
                     <div className={`text-[10px] font-medium ${selectedModel === model.id ? 'text-orange-400' : 'text-slate-400'}`}>
                       {model.desc}
                     </div>
@@ -77,6 +101,12 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({ selectedModel, onM
           </motion.div>
         )}
       </AnimatePresence>
+
+      <UpgradeModal 
+        isOpen={showUpgradeModal} 
+        onClose={() => setShowUpgradeModal(false)} 
+        featureName="Premium AI Models" 
+      />
     </div>
   );
 };

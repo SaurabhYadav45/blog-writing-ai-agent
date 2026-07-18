@@ -8,7 +8,7 @@ and public-facing profiles.
 
 from sqlmodel import SQLModel, Field
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 class UserBase(SQLModel):
     """
@@ -19,7 +19,19 @@ class UserBase(SQLModel):
     full_name: Optional[str] = None
     is_active: bool = True
     plan_name: str = Field(default="Free")
-    credits: int = Field(default=5)
+    credits: int = Field(default=1)
+    cloudinary_cloud_name: Optional[str] = None
+    cloudinary_api_key: Optional[str] = None
+    cloudinary_api_secret: Optional[str] = None
+    plan_expires_at: Optional[datetime] = None
+    
+    brand_persona: Optional[str] = None
+    cms_wordpress_url: Optional[str] = None
+    cms_wordpress_username: Optional[str] = None
+    cms_wordpress_app_password: Optional[str] = Field(default=None)
+    cms_medium_token: Optional[str] = Field(default=None)
+    cms_linkedin_token: Optional[str] = Field(default=None)
+    cms_linkedin_author_urn: Optional[str] = Field(default=None)
 
 class User(UserBase, table=True):
     """
@@ -28,7 +40,7 @@ class User(UserBase, table=True):
     """
     id: Optional[int] = Field(default=None, primary_key=True)
     hashed_password: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class UserCreate(UserBase):
     """
@@ -37,6 +49,20 @@ class UserCreate(UserBase):
     """
     password: str
 
+class UserUpdate(SQLModel):
+    """
+    Schema for updating user profile settings.
+    """
+    full_name: Optional[str] = None
+    cloudinary_cloud_name: Optional[str] = None
+    cloudinary_api_key: Optional[str] = None
+    cloudinary_api_secret: Optional[str] = None
+    brand_persona: Optional[str] = None
+    cms_wordpress_url: Optional[str] = None
+    cms_wordpress_username: Optional[str] = None
+    cms_wordpress_app_password: Optional[str] = None
+    cms_medium_token: Optional[str] = None
+
 class UserPublic(UserBase):
     """
     Schema for returned user data in API responses.
@@ -44,3 +70,4 @@ class UserPublic(UserBase):
     """
     id: int
     created_at: datetime
+    plan_expires_at: Optional[datetime] = None

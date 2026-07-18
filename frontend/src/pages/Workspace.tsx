@@ -8,12 +8,14 @@
  * - Renders a responsive mobile header, Sidebar control menu, and the Main Workspace interface.
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Sidebar } from '../components/Sidebar';
 import { MainWorkspace } from '../components/MainWorkspace';
-import { Menu, X, LogOut } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+import { getBlogById, generateBlog, getStreamUrl } from '../services/blogs';
+import { MODEL_NAMES } from '../config/models';
 
 export const Workspace = () => {
   // Currently viewed blog ID
@@ -24,7 +26,7 @@ export const Workspace = () => {
   
   // Active workflow variables
   const [isGenerating, setIsGenerating] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<string>('Claude');
+  const [selectedModel, setSelectedModel] = useState<string>(MODEL_NAMES.GPT_CHEAP);
   const [streamStatus, setStreamStatus] = useState<string>('pending');
   const [streamMessage, setStreamMessage] = useState<string>('');
   const [clearSignal, setClearSignal] = useState<number>(0);
@@ -43,7 +45,6 @@ export const Workspace = () => {
   const [activeTab, setActiveTab] = useState('Preview');
 
   const { token } = useAuth();
-  const navigate = useNavigate();
   const location = useLocation();
 
   // Listen to navigation state for auto-loading specific blogs or pre-selecting tabs
@@ -57,6 +58,21 @@ export const Workspace = () => {
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
+
+  const handleDeleteBlog = (id: number) => {
+    if (selectedBlogId === id) {
+      setSelectedBlogId(null);
+      setFinalMarkdown(null);
+      setPlan(null);
+      setEvidence([]);
+      setLogs([]);
+      setMetrics([]);
+      setSeoMetadata(null);
+      setStreamStatus('idle');
+      setStreamMessage('');
+      setActiveTab('Preview');
+    }
+  };
 
   /**
    * Load metadata and content of a specific blog post by ID.
@@ -81,11 +97,7 @@ export const Workspace = () => {
     }
     
     try {
-      const response = await fetch(`http://localhost:8000/api/blogs/${id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const response = await getBlogById(id, token || '');
       const data = await response.json();
       setFinalMarkdown(data.markdown_content || "No content generated yet.");
       if (!isLiveCompletion) {
@@ -125,14 +137,14 @@ export const Workspace = () => {
 
     try {
       // 1. Post request to initialize the generation record
-      const response = await fetch('http://localhost:8000/api/blogs/generate', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ topic, tone, audience, depth, reference_urls: referenceUrls, model_name: selectedModel })
-      });
+      const response = await generateBlog({
+        topic,
+        tone,
+        audience,
+        depth,
+        reference_urls: referenceUrls,
+        model_name: selectedModel
+      }, token || '');
       
       if (!response.ok) throw new Error("Failed to start generation");
       
@@ -141,7 +153,7 @@ export const Workspace = () => {
       setLogs(prev => [...prev, `Created blog record #${blog_id}. Opening SSE stream...`]);
 
       // 2. Open SSE stream passing authorization token in URL query parameter
-      const eventSource = new EventSource(`http://localhost:8000/api/blogs/stream/${blog_id}?token=${token}`);
+      const eventSource = new EventSource(getStreamUrl(blog_id, token || ''));
       
       eventSource.onmessage = async (event) => {
         const data = JSON.parse(event.data);
@@ -244,6 +256,7 @@ export const Workspace = () => {
           selectedBlogId={selectedBlogId}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
+          onDeleteBlog={handleDeleteBlog}
         />
       </div>
     </div>

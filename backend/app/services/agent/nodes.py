@@ -1,31 +1,10 @@
-"""
-LangGraph Multi-Agent Blog Generation Engine.
-This module compiles a StateGraph that orchestrates the execution of multiple
-specialized AI agents to produce SEO-optimized, technical blog posts.
-
-Graph Nodes/Agents:
-1. Router: Analyzes the topic and decides if web research is required.
-2. Research: Scours the web using Tavily Search to gather real-time data/evidence.
-3. Orchestrator: Creates a detailed structured layout plan based on the topic.
-4. Workers (Concurrent): Concurrently writes individual markdown sections.
-5. Image Planner: Plans placement of a featured thumbnail image.
-6. Content Merger: Compiles worker outputs and places image placeholders.
-7. Image Generator: Generates the planned thumbnail using DALL-E-3 and stores it on Cloudinary.
-8. SEO Editor: Integrates metadata and fetches a highly relevant YouTube video tutorial.
-"""
-
-from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
 from typing import TypedDict, Annotated, List, Literal, Optional
 import operator
 from langgraph.types import Send
-
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
-from pydantic import BaseModel, Field
-
 from langchain_tavily import TavilySearch
 from datetime import date
 from openai import OpenAI
@@ -34,9 +13,11 @@ import requests
 import os
 
 from app.core.config import settings
+from app.core import llm_models
 from app.services.cloudinary_service import upload_image_bytes
+from app.services.agent.prompt import ROUTER_SYSTEM_PROMPT, RESEARCH_SYSTEM_PROMPT, PLANNER_SYSTEM_PROMPT, WORKER_SYSTEM_PROMPT, DECIDE_IMAGES_SYSTEM_PROMPT, EDITOR_SYSTEM_PROMPT
+from app.services.agent.state import BlogState, Task, Plan, EvidenceItem, EvidencePack, RouterDecision, ImageSpec, GlobalImagePlan, SEOMetadata, EditorOutput
 
-# Inject Tavily API key directly into the environment for LangChain Tavily wrapper
 os.environ["TAVILY_API_KEY"] = settings.TAVILY_API_KEY
 
 def get_llm(state: dict, expensive: bool = True):
@@ -45,23 +26,23 @@ def get_llm(state: dict, expensive: bool = True):
     model name in state and whether an expensive (large reasoning) or cheap
     (fast parsing) model is desired for the active graph node.
     """
-    model_name = state.get("model_name", "GPT-5.6-Sol").lower()
+    model_name = state.get("model_name", llm_models.FAMILY_GPT).lower()
     
     if "claude" in model_name:
         if expensive:
-            return ChatAnthropic(model="claude-sonnet-5", api_key=settings.ANTHROPIC_API_KEY)
+            return ChatAnthropic(model=llm_models.MODEL_CLAUDE_EXPENSIVE, api_key=settings.ANTHROPIC_API_KEY)
         else:
-            return ChatAnthropic(model="claude-haiku-4-5-20251001", api_key=settings.ANTHROPIC_API_KEY)
+            return ChatAnthropic(model=llm_models.MODEL_CLAUDE_CHEAP, api_key=settings.ANTHROPIC_API_KEY)
     elif "gemini" in model_name:
         if expensive:
-            return ChatGoogleGenerativeAI(model="gemini-3.5-pro", api_key=settings.GOOGLE_API_KEY)
+            return ChatGoogleGenerativeAI(model=llm_models.MODEL_GEMINI_EXPENSIVE, api_key=settings.GOOGLE_API_KEY)
         else:
-            return ChatGoogleGenerativeAI(model="gemini-3.5-flash", api_key=settings.GOOGLE_API_KEY)
+            return ChatGoogleGenerativeAI(model=llm_models.MODEL_GEMINI_CHEAP, api_key=settings.GOOGLE_API_KEY)
     else:
         if expensive:
-            return ChatOpenAI(model="gpt-5.6-sol", api_key=settings.OPENAI_API_KEY)
+            return ChatOpenAI(model=llm_models.MODEL_GPT_EXPENSIVE, api_key=settings.OPENAI_API_KEY)
         else:
-            return ChatOpenAI(model="gpt-5.6-luna", api_key=settings.OPENAI_API_KEY)
+            return ChatOpenAI(model=llm_models.MODEL_GPT_CHEAP, api_key=settings.OPENAI_API_KEY)
 
 def extract_usage(raw, node_name: str, model_name: str):
     """
@@ -87,170 +68,7 @@ def extract_usage(raw, node_name: str, model_name: str):
         "total_tokens": usage.get("total_tokens", 0)
     }
 
-# ------------------------------------------------------------
-# Pydantic Schemas for LangGraph State and structured output
-# ------------------------------------------------------------
 
-class Task(BaseModel):
-    """
-    Schema representing a single section writing task within the outline.
-    """
-    id: int
-    title: str
-    goal: str = Field(
-        ...,
-        description="One sentence describing what the reader should be able to do /understand after this section."
-    )
-    bullets: List[str] = Field(
-        ...,
-        min_length=3,
-        max_length=5,
-        description="3-5 concrete non-overlapping subpoints to cover in this section"
-    )
-    target_words: int = Field(
-        ...,
-        description="target word count for this section is (120-450)"
-    )
-    tags: List[str] = Field(default_factory=list)
-    requires_research: bool = False
-    requires_citations: bool = False
-    requires_code: bool = False
-
-
-class Plan(BaseModel):
-    """
-    Schema representing the global plan / outline generated by the Orchestrator.
-    """
-    blog_title: str
-    audience: str = Field(
-        ...,
-        description="who this blog is for."
-    )
-    tone: str = Field(
-        ...,
-        description="Writing tone of this blog (e.g., practical, crisp)."
-    )
-    blog_kind: Literal[
-        "explainer",
-        "tutorial",
-        "news_roundup",
-        "comparison",
-        "system_design",
-        "listicle",
-        "lifestyle",
-        "opinion",
-        "review",
-        "general"
-    ] = "general"
-    constraints: List[str] = Field(default_factory=list)
-    tasks: List[Task]
-
-
-class EvidenceItem(BaseModel):
-    """
-    Schema representing a snippet of real-world research evidence.
-    """
-    title: str
-    url: str
-    published_at: Optional[str] = None
-    snippet: Optional[str] = None
-    source: Optional[str] = None
-
-
-class EvidencePack(BaseModel):
-    """
-    Schema representing a collection of researched evidence.
-    """
-    evidence: List[EvidenceItem] = Field(default_factory=list)
-
-
-class RouterDecision(BaseModel):
-    """
-    Structured output for the Router agent.
-    """
-    need_research: bool
-    mode: Literal["closed_book", "hybrid", "open_book"]
-    queries: List[str] = Field(default_factory=list)
-
-
-class ImageSpec(BaseModel):
-    """
-    Structured output specifying how DALL-E-3 should render a blog image.
-    """
-    task_id: int = Field(..., description="The ID of the task/section where this image should be inserted.")
-    filename: str = Field(..., description="Save under /images, e.g. abc_flow.png")
-    alt: str
-    caption: str
-    prompt: str = Field(..., description="Prompt to send to image model")
-    size: Literal["1536x1024"] = "1536x1024"
-    quality: Literal["low", "medium"] = "medium"
-    placeholder: Optional[str] = None # Filled programmatically
-
-
-class GlobalImagePlan(BaseModel):
-    """
-    Collection of planned images for the blog post.
-    """
-    images: List[ImageSpec] = Field(default_factory=list)
-
-
-class BlogState(TypedDict):
-    """
-    TypedDict representing the shared graph state updated by active nodes.
-    """
-    topic: str
-    model_name: str
-    depth: str
-    reference_urls: Optional[str]
-    
-    # Routing and Research
-    mode: str
-    need_research: bool
-    queries: List[str]
-    evidence: List[EvidenceItem]
-    plan: Optional[Plan]
-
-    # Recency Control
-    as_of: str           # ISO date, e.g. "2026-01-29"
-    recency_days: int    # Date range scope for Tavily Search
-
-    # Workers output channel
-    sections: Annotated[List[tuple[int, str]], operator.add]
-
-    # Content assembly & images
-    merged_md: str
-    md_with_placeholders: str
-    image_specs: List[dict]
-
-    # Final completed output
-    final_blog: str
-    seo_metadata: dict
-    
-    # Accumulator of token usage metrics across nodes
-    metrics: Annotated[List[dict], operator.add]
-
-
-# -------------------------------------------------------------------
-# Router Node:
-# -------------------------------------------------------------------
-ROUTER_SYSTEM_PROMPT = """You are a highly intelligent routing module for a versatile blog planner.
-
-Decide whether web research is needed BEFORE planning.
-
-Modes:
-- closed_book (needs_research=false):
-  Evergreen topics where correctness does not depend on recent facts (concepts, fundamentals).
-- hybrid (needs_research=true):
-  Mostly evergreen but needs up-to-date examples/tools/models to be useful.
-- open_book (needs_research=true):
-  Mostly volatile: weekly roundups, "this week", "latest", rankings, pricing, policy/regulation.
-
-If needs_research=true:
-- Output 3–10 high-signal queries.
-- Queries should be scoped and specific (avoid generic queries like just "AI" or "LLM").
-- Ensure all queries target the most up-to-date and relevant information up to the provided Current Date/As-Of (do not generate queries with outdated years like 2023 unless explicitly requested, use the current year/timeframe).
-- If user asked for "last week/this week/latest", reflect that constraint IN THE QUERIES.
-"""
 
 def router_node(state: BlogState):
     """
@@ -259,7 +77,7 @@ def router_node(state: BlogState):
     """
     topic = state["topic"]
     as_of = state.get("as_of", date.today().isoformat())
-    model_name = state.get("model_name", "GPT-4o")
+    model_name = state.get("model_name", llm_models.FAMILY_GPT)
     llm = get_llm(state, expensive=False)
     decider_llm = llm.with_structured_output(RouterDecision, include_raw=True)
     
@@ -332,19 +150,6 @@ def _tavily_search(query: str, max_results: int = 5) -> List[dict]:
     return normalized
 
 
-RESEARCH_SYSTEM_PROMPT = """ 
-You are a research synthesizer for technical writing.
-
-Given raw web search results, produce a deduplicated list of EvidenceItem objects.
-
-Rules:
-- Only include items with a non-empty url.
-- Prefer relevant + authoritative sources (company blogs, docs, reputable outlets).
-- If a published date is explicitly present in the result payload, keep it as YYYY-MM-DD.
-If missing or unclear, set published_at=null. Do NOT guess.
-- Keep snippets short.
-- Deduplicate by URL.
-"""
 
 def research_node(state: BlogState) -> dict:
     """
@@ -412,36 +217,6 @@ def research_node(state: BlogState) -> dict:
 # ---------------------------------------------------------------------
 # Orchestrator Node
 # ---------------------------------------------------------------------
-PLANNER_SYSTEM_PROMPT = """You are an expert orchestrator and blog planner.
-Your job is to produce a highly actionable outline for a blog post based on the requested Depth / Complexity.
-
-Depth / Complexity Guidelines:
-- "Brief Overview": Create exactly 3-4 sections (tasks). Keep goals very concise.
-- "Standard Guide": Create exactly 5-6 sections (tasks).
-- "Ultimate Deep-Dive": Create exactly 7-10 sections (tasks).
-
-Hard requirements:
-- Each task must include:
-  1) goal (1 sentence)
-  2) 3–6 bullets that are concrete, specific, and non-overlapping
-  3) target word count (calculate appropriately to reach the target length)
-
-Tone & Universal Readability:
-- No matter the audience, the blog should be universally engaging.
-- Plan to explain the core intuition using analogies so a junior can follow, while planning deep-dive code blocks for seniors.
-
-Grounding rules:
-- Mode closed_book: keep it evergreen; do not depend on evidence.
-- Mode hybrid:
-  - Use evidence for up-to-date examples in bullets.
-  - Mark sections using fresh info as requires_research=True and requires_citations=True.
-- Mode open_book (weekly news roundup):
-  - Set blog_kind = "news_roundup".
-  - Every section is about summarizing events + implications.
-  - If evidence is empty, create a plan that says "insufficient fresh sources".
-
-Output must strictly match the Plan schema.
-"""
 
 def orchestrator_node(state: BlogState):
     """
@@ -449,7 +224,7 @@ def orchestrator_node(state: BlogState):
     Incorporates web search evidence to ground claims if in hybrid/open_book modes.
     """
     llm = get_llm(state)
-    model_name = state.get("model_name", "GPT-4o")
+    model_name = state.get("model_name", llm_models.FAMILY_GPT)
     planner = llm.with_structured_output(Plan, include_raw=True)
     evidence = state.get("evidence", [])
     mode = state.get("mode", "closed_book")
@@ -506,7 +281,8 @@ def fanout(state: BlogState):
             "as_of": state["as_of"],
             "recency_days": state["recency_days"],
             "plan": plan.model_dump(),
-            "evidence": [evidence_item.model_dump() for evidence_item in state.get("evidence", [])]
+            "evidence": [evidence_item.model_dump() for evidence_item in state.get("evidence", [])],
+            "brand_persona": state.get("brand_persona")
         }
         send = Send("worker", worker_state)
         sends.append(send)
@@ -517,32 +293,6 @@ def fanout(state: BlogState):
 # ---------------------------------------------------------------------
 # Worker Node: Generates the content of a single section
 # ---------------------------------------------------------------------
-WORKER_SYSTEM_PROMPT = """You are an expert developer and writer crafting an engaging, story-driven blog for a platform like Hashnode.
-Write ONE section of a blog post in Markdown.
-
-Hard constraints:
-- Follow the provided Goal and cover ALL Bullets in order (do not skip or merge bullets).
-- Stay close to Target words (±15%).
-- Output ONLY the section content in Markdown (no blog title H1, no extra commentary).
-- Start with a '## <Section Title>' heading.
-
-Hashnode Style & Universal Readability constraints:
-- Write like a human speaking to a colleague over coffee. Start with an engaging narrative or hook if appropriate.
-- ALWAYS explain the intuition behind complex topics using simple analogies so a junior can follow along.
-- NEVER write a 'wall of text'. Paragraphs must NOT exceed 3 sentences.
-- Break up your writing using '###' subheadings for each logical part of the section.
-- Use frequent line breaks, bold emphasis, blockquotes, and bullet points.
-- Use GitHub-style callouts (`> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`, `> [!CAUTION]`) to highlight key takeaways, tips, or warnings.
-
-Grounding policy:
-- Do NOT introduce any specific event/company/model claim unless supported by Evidence URLs.
-- Cite Evidence URLs as Markdown links: ([Source](URL)).
-- Evergreen reasoning (concepts, intuition) is OK without citations.
-
-Code & Diagrams:
-- If requires_code == true, include at least one minimal, correct code snippet.
-- For complex technical flows or architectures, generate ` ```mermaid ` blocks instead of asking for images.
-"""
 
 def worker_node(payload: dict) -> dict:
     """
@@ -576,6 +326,7 @@ def worker_node(payload: dict) -> dict:
                     f"Blog title: {plan.blog_title}\n"
                     f"Audience: {plan.audience}\n"
                     f"Tone: {plan.tone}\n"
+                    f"Brand Persona / Tone Override: {payload.get('brand_persona') or 'None'}\n"
                     f"Target Depth: {payload.get('depth', 'Standard Guide')}\n"
                     f"Blog kind: {plan.blog_kind}\n"
                     f"Constraints: {plan.constraints}\n"
@@ -596,7 +347,7 @@ def worker_node(payload: dict) -> dict:
         ]
     )
     
-    model_name = payload.get("model_name", "GPT-4o")
+    model_name = payload.get("model_name", llm_models.FAMILY_GPT)
     metrics_log = extract_usage(section_md, f"Worker ({task.title})", model_name)
 
     content = section_md.content
@@ -652,19 +403,6 @@ def merge_content(state: BlogState):
     return {"merged_md": merged_md, "image_specs": image_specs}
 
 
-DECIDE_IMAGES_SYSTEM_PROMPT = """
-You are an expert Technical Editor. You must plan the images for this blog post.
-
-Rules:
-1. You MUST always generate exactly 1 "Featured Thumbnail" image that captures the overarching theme of the blog. This image MUST use the '1536x1024' (landscape) size and should be assigned to the first task_id (the introduction).
-2. DO NOT generate any additional images for the body. Internal diagrams will be handled via Mermaid.js.
-3. Therefore, you must return EXACTLY 1 image in total.
-4. Keep the image quality to be 'medium'.
-5. Assign the image to the first task_id from the plan.
-
-Return STRICTLY GlobalImagePlan.
-"""
-
 def decide_images(state: BlogState) -> dict:
     """
     Plans details for a thumbnail image to represent the blog visual.
@@ -673,7 +411,12 @@ def decide_images(state: BlogState) -> dict:
     plan = state["plan"]
     assert plan is not None
     llm = get_llm(state, expensive=False)
-    model_name = state.get("model_name", "GPT-4o")
+    model_name = state.get("model_name", llm_models.FAMILY_GPT)
+
+    plan_name = state.get("plan_name", "Free")
+    image_prompt_instruction = "Propose ONLY 1 image prompt for the thumbnail."
+    if plan_name == "Pro":
+        image_prompt_instruction = "Propose 2 to 3 image prompts total (1 thumbnail + 1 or 2 inline images) and assign them to the most relevant task_id."
 
     image_insertion_planner = llm.with_structured_output(GlobalImagePlan, include_raw=True)
     response = image_insertion_planner.invoke(
@@ -684,7 +427,7 @@ def decide_images(state: BlogState) -> dict:
                     f"Blog kind: {plan.blog_kind}\n"
                     f"Topic: {state['topic']}\n\n"
                     f"Plan Tasks: {[({'id': t.id, 'title': t.title}) for t in plan.tasks]}\n\n"
-                    f"Propose image prompts and assign them to the most relevant task_id."
+                    f"{image_prompt_instruction}"
                 )
             )
         ]
@@ -710,7 +453,7 @@ def openai_generate_image_bytes(prompt: str, size: str = "1536x1024", quality: s
     client = OpenAI(api_key=api_key)
 
     resp = client.images.generate(
-        model="gpt-image-1",
+        model=llm_models.MODEL_GPT_IMAGE,
         prompt=prompt,
         n=1,
         size=size,
@@ -771,7 +514,12 @@ def generate_and_place_images(state: BlogState):
             continue
 
         try:
-            img_url = upload_image_bytes(img_bytes)
+            img_url = upload_image_bytes(
+                img_bytes,
+                user_cloud_name=state.get("cloudinary_cloud_name"),
+                user_api_key=state.get("cloudinary_api_key"),
+                user_api_secret=state.get("cloudinary_api_secret")
+            )
         except Exception as e:
             error_msg = f"CLOUDINARY UPLOAD ERROR: {e}"
             print(error_msg)
@@ -796,83 +544,12 @@ def generate_and_place_images(state: BlogState):
         
     metrics_log = {
         "node": "Generate Images",
-        "model_name": "gpt-image-1",
+        "model_name": llm_models.MODEL_GPT_IMAGE,
         "images_generated": image_count
     }
     
     return {"final_blog": md, "metrics": [metrics_log]}
 
-
-class SEOMetadata(BaseModel):
-    """
-    Structured schema representing blog SEO details.
-    """
-    meta_description: str
-    slug: str
-    focus_keywords: List[str]
-
-class EditorOutput(BaseModel):
-    """
-    Structured output schema for the Editor Node.
-    """
-    seo_metadata: SEOMetadata
-    youtube_embed_html: Optional[str] = Field(default=None, description="If highly relevant, an HTML iframe tag for a YouTube video. Provide ONLY the iframe tag.")
-
-EDITOR_SYSTEM_PROMPT = """You are an expert technical SEO specialist and Editor.
-You will receive the topic and structured outline (plan) for a blog post.
-Your job is to generate structured SEO metadata based on this context (meta_description, slug, focus_keywords).
-
-Return ONLY the metadata. Do NOT rewrite the entire blog post!
-"""
-
-def fetch_youtube_video(topic: str) -> str:
-    """
-    Crawl YouTube API for the most relevant video tutorial explaining the blog topic
-    and returns a clean embeddable iframe tag.
-    """
-    try:
-        from googleapiclient.discovery import build
-    except ImportError:
-        return ""
-        
-    api_key = settings.YOUTUBE_API_KEY or os.getenv("YOUTUBE_API_KEY")
-    if not api_key:
-        print("YOUTUBE_API_KEY not found in .env, skipping YouTube integration.")
-        return ""
-    
-    youtube = build("youtube", "v3", developerKey=api_key)
-    query = f"{topic} tutorial explanation"
-    
-    try:
-        request = youtube.search().list(
-            part="snippet",
-            q=query,
-            type="video",
-            maxResults=1,
-            order="relevance",
-            videoEmbeddable="true"
-        )
-        response = request.execute()
-        
-        if "items" in response and len(response["items"]) > 0:
-            video_id = response["items"][0]["id"]["videoId"]
-            title = response["items"][0]["snippet"]["title"]
-            
-            iframe = (
-                f'\n\n## Related Video Tutorial\n\n'
-                f'<p align="center">\n'
-                f'  <iframe width="750" height="422" src="https://www.youtube.com/embed/{video_id}" '
-                f'frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" '
-                f'allowfullscreen style="max-width: 100%; border-radius: 8px; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);"></iframe>\n'
-                f'  <br />\n'
-                f'  <em>{title}</em>\n'
-                f'</p>\n'
-            )
-            return iframe
-        return ""
-    except Exception as e:
-        print(f"YouTube search error: {e}")
-        return ""
 
 def editor_node(state: BlogState):
     """
@@ -880,7 +557,7 @@ def editor_node(state: BlogState):
     Also queries and embeds a relevant YouTube tutorial at the footer of the markdown.
     """
     llm = get_llm(state, expensive=False)
-    model_name = state.get("model_name", "GPT-4o")
+    model_name = state.get("model_name", llm_models.FAMILY_GPT)
     
     editor = llm.with_structured_output(EditorOutput, include_raw=True)
     
@@ -923,31 +600,3 @@ def editor_node(state: BlogState):
 
 
 # ---------------------------------------------------------------------
-# Compile Main Agent Graph
-# ---------------------------------------------------------------------
-builder = StateGraph(BlogState)
-
-# Add all agent nodes to StateGraph
-builder.add_node("router", router_node)
-builder.add_node("research", research_node)
-builder.add_node("orchestrator", orchestrator_node)
-builder.add_node("worker", worker_node)
-builder.add_node("decide_images", decide_images)
-builder.add_node("merge_content", merge_content)
-builder.add_node("generate_and_place_images", generate_and_place_images)
-builder.add_node("editor", editor_node)
-
-# Set up flow edges and conditional routing
-builder.add_edge(START, "router")
-builder.add_conditional_edges("router", route_next, {"research": "research", "orchestrator": "orchestrator"})
-builder.add_edge("research", "orchestrator")
-builder.add_conditional_edges("orchestrator", fanout, ["worker"])
-builder.add_edge("worker", "decide_images")
-builder.add_edge("decide_images", "merge_content")
-builder.add_edge("merge_content", "generate_and_place_images")
-builder.add_edge("generate_and_place_images", "editor")
-builder.add_edge("editor", END)
-
-# In-memory checkpointer to persist state and checkpoints for resume functionalities
-memory = MemorySaver()
-graph = builder.compile(checkpointer=memory)

@@ -5,16 +5,18 @@ using Passlib and bcrypt, and JWT access token creation/validation
 using the PyJWT library.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Union, Optional
 from passlib.context import CryptContext
 import jwt
 
-# Secret key used for signing JWTs.
-# WARNING: Always change this to a secure random string in production!
-SECRET_KEY = "super_secret_key_change_me_in_production"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # Default expiration: 7 days
+from app.core.config import settings
+
+# Security configurations loaded from environment settings
+SECRET_KEY = settings.SECRET_KEY
+ALGORITHM = settings.ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+
 
 # Password hashing context using the bcrypt hashing algorithm
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -31,9 +33,9 @@ def create_access_token(subject: Union[str, Any], expires_delta: Optional[timede
         The encoded and signed JWT string.
     """
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode = {"exp": expire, "sub": str(subject)}
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -62,3 +64,25 @@ def get_password_hash(password: str) -> str:
         The hashed password string ready to be stored in the database.
     """
     return pwd_context.hash(password)
+
+import os
+from cryptography.fernet import Fernet
+
+def get_encryption_key() -> bytes:
+    key = os.environ.get("ENCRYPTION_KEY")
+    if not key:
+        key = Fernet.generate_key().decode('utf-8')
+        os.environ["ENCRYPTION_KEY"] = key
+    return key.encode('utf-8')
+
+def encrypt_token(token: Optional[str]) -> Optional[str]:
+    if not token:
+        return token
+    f = Fernet(get_encryption_key())
+    return f.encrypt(token.encode('utf-8')).decode('utf-8')
+
+def decrypt_token(encrypted_token: Optional[str]) -> Optional[str]:
+    if not encrypted_token:
+        return encrypted_token
+    f = Fernet(get_encryption_key())
+    return f.decrypt(encrypted_token.encode('utf-8')).decode('utf-8')

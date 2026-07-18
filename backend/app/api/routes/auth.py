@@ -9,10 +9,14 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
+from pydantic import BaseModel
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 
 from app.core.db import get_session
 from app.core.security import create_access_token, get_password_hash, verify_password
 from app.models.user import User, UserCreate, UserPublic
+from app.core.config import settings
 
 router = APIRouter()
 
@@ -73,3 +77,54 @@ def login(
         ),
         "token_type": "bearer",
     }
+
+class GoogleLogin(BaseModel):
+    token: str
+
+@router.post("/google")
+def google_login(
+    google_data: GoogleLogin,
+    session: Session = Depends(get_session)
+) -> Any:
+    """
+    Authenticate a user using a Google OAuth ID Token.
+    """
+    try:
+        # Verify the token with Google
+        id_info = id_token.verify_oauth2_token(
+            google_data.token, 
+            google_requests.Request(),
+            audience=settings.GOOGLE_CLIENT_ID
+        )
+        email = id_info.get("email")
+        name = id_info.get("name")
+        
+        if not email:
+            raise HTTPException(status_code=400, detail="Google token did not provide an email")
+            
+        user = session.exec(select(User).where(User.email == email)).first()
+        if not user:
+            # Create a new user with a dummy password since they are logging in with Google
+            import secrets
+            dummy_password = secrets.token_urlsafe(32)
+            user = User(
+                email=email,
+                full_name=name,
+                hashed_password=get_password_hash(dummy_password),
+            )
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+            
+        if not user.is_active:
+            raise HTTPException(status_code=400, detail="Inactive user")
+            
+        access_token_expires = timedelta(minutes=60 * 24 * 7)
+        return {
+            "access_token": create_access_token(
+                user.id, expires_delta=access_token_expires
+            ),
+            "token_type": "bearer",
+        }
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid Google token")

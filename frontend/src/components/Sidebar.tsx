@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Sparkles, History, ChevronRight, Trash2, Edit2 } from 'lucide-react';
+import { History, Trash2, Edit2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { ConfigForm } from './ConfigForm';
 import { ConfirmModal } from './ConfirmModal';
+import { getBlogs, deleteBlog, updateBlogTitle } from '../services/blogs';
 
 
 interface Blog {
@@ -29,9 +30,7 @@ export function Sidebar({ onSelectBlog, onGenerate, isGenerating, clearSignal }:
 
   const fetchBlogs = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/blogs', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const response = await getBlogs(token || '');
       const data = await response.json();
       if (Array.isArray(data)) {
         setBlogs(data);
@@ -63,10 +62,7 @@ export function Sidebar({ onSelectBlog, onGenerate, isGenerating, clearSignal }:
   const confirmDelete = async () => {
     if (blogToDelete === null) return;
     try {
-      await fetch(`http://localhost:8000/api/blogs/${blogToDelete}`, { 
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      await deleteBlog(blogToDelete, token || '');
       setBlogs(prev => prev.filter(b => b.id !== blogToDelete));
     } catch (err) {
       console.error(err);
@@ -86,14 +82,7 @@ export function Sidebar({ onSelectBlog, onGenerate, isGenerating, clearSignal }:
     const newTopic = window.prompt("Enter new blog title:", currentTopic);
     if (!newTopic || newTopic === currentTopic) return;
     try {
-      await fetch(`http://localhost:8000/api/blogs/${id}/title`, {
-        method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ topic: newTopic })
-      });
+      await updateBlogTitle(id, newTopic, token || '');
       setBlogs(prev => prev.map(b => b.id === id ? { ...b, topic: newTopic } : b));
     } catch (err) {
       console.error(err);

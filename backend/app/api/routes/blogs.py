@@ -19,6 +19,7 @@ from app.models.blog import Blog
 from app.models.user import User
 from app.api.deps import get_current_user, get_current_user_from_query
 from app.services.agent import graph
+from app.core import llm_models
 
 router = APIRouter()
 
@@ -49,6 +50,10 @@ def generate_blog(
     """
     if current_user.credits <= 0:
         raise HTTPException(status_code=403, detail="Not enough credits to generate a blog.")
+        
+    premium_models = [llm_models.MODEL_GPT_EXPENSIVE, llm_models.MODEL_CLAUDE_EXPENSIVE, llm_models.MODEL_GEMINI_EXPENSIVE]
+    if payload.model_name in premium_models and current_user.plan_name != "Pro":
+        raise HTTPException(status_code=403, detail="Premium models are a Pro feature. Please upgrade to use this.")
         
     db_blog = Blog(
         topic=payload.topic,
@@ -118,7 +123,7 @@ async def stream_blog(
                 inputs = {
                     "topic": gen_db_blog.topic,
                     "mode": "auto",
-                    "model_name": gen_db_blog.model_name or "GPT-4o",
+                    "model_name": gen_db_blog.model_name or llm_models.FAMILY_GPT,
                     "depth": gen_db_blog.depth or "Standard Guide",
                     "reference_urls": gen_db_blog.reference_urls or "",
                     "need_research": False,
@@ -134,6 +139,11 @@ async def stream_blog(
                     "final_blog": "",
                     "seo_metadata": {},
                     "metrics": [],
+                    "cloudinary_cloud_name": current_user.cloudinary_cloud_name,
+                    "cloudinary_api_key": current_user.cloudinary_api_key,
+                    "cloudinary_api_secret": current_user.cloudinary_api_secret,
+                    "brand_persona": current_user.brand_persona,
+                    "plan_name": current_user.plan_name,
                 }
     
                 final_state = None
@@ -375,7 +385,7 @@ class RegenerateRequest(BaseModel):
     """
     selected_text: str
     prompt: str
-    model_name: str = "GPT-4o"
+    model_name: str = llm_models.FAMILY_GPT
     full_text: str = ""
 
 @router.post("/{blog_id}/regenerate-selection")
@@ -393,6 +403,9 @@ def regenerate_selection(
     Raises:
         HTTPException: 404 if not found or unauthorized.
     """
+    if current_user.plan_name != "Pro":
+        raise HTTPException(status_code=403, detail="Regeneration is a Pro feature. Please upgrade to use this.")
+        
     db_blog = session.get(Blog, blog_id)
     if not db_blog or db_blog.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Blog not found")
@@ -406,11 +419,11 @@ def regenerate_selection(
     # Initialize the correct LLM provider
     m = payload.model_name.lower()
     if "claude" in m:
-        llm = ChatAnthropic(model="claude-sonnet-5", api_key=settings.ANTHROPIC_API_KEY)
+        llm = ChatAnthropic(model=llm_models.MODEL_CLAUDE_EXPENSIVE, api_key=settings.ANTHROPIC_API_KEY)
     elif "gemini" in m:
-        llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", api_key=settings.GOOGLE_API_KEY)
+        llm = ChatGoogleGenerativeAI(model=llm_models.MODEL_GEMINI_EXPENSIVE, api_key=settings.GOOGLE_API_KEY)
     else:
-        llm = ChatOpenAI(model="gpt-4o", api_key=settings.OPENAI_API_KEY)
+        llm = ChatOpenAI(model=llm_models.MODEL_GPT_EXPENSIVE, api_key=settings.OPENAI_API_KEY)
         
     system_prompt = (
         "You are an expert technical editor. Rewrite the provided selected text based on the user's instructions. "
@@ -431,3 +444,94 @@ def regenerate_selection(
     
     new_text = response.content
     return {"new_text": new_text}
+
+class PublishRequest(BaseModel):
+    platform: str
+
+@router.post("/{blog_id}/publish")
+def publish_blog_endpoint(
+    blog_id: int, 
+    payload: PublishRequest,
+    session: Session = Depends(get_session), 
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Publishes a completed blog to the configured CMS.
+    """
+    if current_user.plan_name != "Pro":
+        raise HTTPException(status_code=403, detail="CMS Publishing is a Pro feature. Please upgrade to use this.")
+        
+    db_blog = session.get(Blog, blog_id)
+    if not db_blog or db_blog.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Blog not found")
+        
+    if db_blog.status != "COMPLETED" or not db_blog.markdown_content:
+        raise HTTPException(status_code=400, detail="Cannot publish an incomplete blog.")
+        
+    from app.services.cms_service import publish_blog, CMSPublishError
+    
+    try:
+        url = publish_blog(db_blog, current_user, payload.platform)
+        db_blog.published_url = url
+        db_blog.cms_platform = payload.platform
+        session.add(db_blog)
+        session.commit()
+        return {"status": "success", "url": url}
+    except CMSPublishError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/{blog_id}/promote/linkedin")
+def promote_on_linkedin(
+    blog_id: int, 
+    session: Session = Depends(get_session), 
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Promotes a published blog on LinkedIn by generating a short post 
+    via an LLM and using the LinkedIn Posts API.
+    """
+    if current_user.plan_name != "Pro":
+        raise HTTPException(status_code=403, detail="LinkedIn promotion is a Pro feature. Please upgrade to use this.")
+        
+    db_blog = session.get(Blog, blog_id)
+    if not db_blog or db_blog.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Blog not found")
+        
+    if not db_blog.published_url:
+        raise HTTPException(status_code=400, detail="Blog must be published to a CMS first.")
+        
+    # Generate the short post
+    from langchain_openai import ChatOpenAI
+    from langchain_core.messages import SystemMessage, HumanMessage
+    from app.core.config import settings
+    from app.core import llm_models
+    
+    llm = ChatOpenAI(model=llm_models.MODEL_GPT_CHEAP, api_key=settings.OPENAI_API_KEY)
+    
+    system_prompt = (
+        "You are an expert social media manager. Create an engaging, professional LinkedIn post "
+        "to promote a new blog article. Keep it under 100 words. Include 2-3 relevant hashtags. "
+        "End with a call to action to read the full article at the link below. "
+        "Do NOT include the actual URL in your text (it will be attached automatically)."
+    )
+    
+    # Optimize tokens by only sending the plan and SEO metadata
+    plan_str = json.dumps(db_blog.plan) if isinstance(db_blog.plan, dict) else str(db_blog.plan)
+    seo_str = json.dumps(db_blog.seo_metadata) if isinstance(db_blog.seo_metadata, dict) else str(db_blog.seo_metadata)
+    
+    human_content = f"Blog Topic: {db_blog.topic}\n\nBlog Outline/Plan: {plan_str}\n\nSEO Metadata: {seo_str}"
+    
+    response = llm.invoke([
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=human_content)
+    ])
+    
+    post_text = response.content.strip()
+    
+    from app.services.cms_service import share_to_linkedin, CMSPublishError
+    
+    try:
+        linkedin_post_id = share_to_linkedin(db_blog, current_user, post_text)
+        return {"status": "success", "linkedin_post_id": linkedin_post_id, "generated_post": post_text}
+    except CMSPublishError as e:
+        raise HTTPException(status_code=400, detail=str(e))

@@ -13,3 +13,7 @@ google-api-python-client
 passlib[bcrypt]
 pyjwt
 python-multipart
+
+google-auth
+alembic
+razorpay
