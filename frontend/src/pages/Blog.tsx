@@ -28,9 +28,9 @@ export const Blog = () => {
             We are working hard to bring you the best articles, tutorials, and insights on AI writing. Stay tuned!
           </p>
 
-          <button className="bg-slate-900 hover:bg-black text-white px-8 py-4 rounded-xl font-medium transition-all shadow-md shadow-slate-200">
+          {/* <button className="bg-slate-900 hover:bg-black text-white px-8 py-4 rounded-xl font-medium transition-all shadow-md shadow-slate-200">
             Notify Me
-          </button>
+          </button> */}
         </div>
 
         </div>
