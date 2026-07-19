@@ -12,7 +12,7 @@ cloudinary
 python-dotenv
 pydantic-settings
 google-api-python-client
-passlib[bcrypt]
+bcrypt
 pyjwt
 python-multipart
 
