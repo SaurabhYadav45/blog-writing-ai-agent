@@ -2,7 +2,6 @@ import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MODEL_NAMES } from '../config/models';
 import { 
   Bot, Zap, FileText,
   MessageSquare, Search, ListChecks, Edit3, Sparkles,

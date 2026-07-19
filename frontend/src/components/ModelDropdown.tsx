@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Bot, Cpu, Sparkles, Crown } from 'lucide-react';
-import { MODEL_NAMES } from '../config/models';
 import { useAuth } from '../context/AuthContext';
 import { UpgradeModal } from './UpgradeModal';
 

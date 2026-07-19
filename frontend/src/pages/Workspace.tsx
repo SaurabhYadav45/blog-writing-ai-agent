@@ -15,8 +15,6 @@ import { Menu, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLocation } from 'react-router-dom';
 import { getBlogById, generateBlog, getStreamUrl } from '../services/blogs';
-import { MODEL_NAMES } from '../config/models';
-
 export const Workspace = () => {
   // Currently viewed blog ID
   const [selectedBlogId, setSelectedBlogId] = useState<number | null>(null);

@@ -8,7 +8,7 @@ import { useLocation } from 'react-router-dom';
 import jsPDF from 'jspdf';
 import { UpgradeModal } from '../components/UpgradeModal';
 import { ConfirmModal } from '../components/ConfirmModal';
-import { MODEL_PRICING, MODEL_NAMES } from '../config/models';
+import { MODEL_PRICING } from '../config/models';
 
 export const Settings = () => {
   const { token, user, refreshUser, logout } = useAuth();
