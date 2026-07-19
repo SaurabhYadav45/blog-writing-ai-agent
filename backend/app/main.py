@@ -33,17 +33,20 @@ async def lifespan(app: FastAPI):
     # Checkpointer Setup
     db_url = settings.DATABASE_URL
     if db_url.startswith("postgresql://") or db_url.startswith("postgres://"):
-        from psycopg_pool import ConnectionPool
-        from langgraph.checkpoint.postgres import PostgresSaver
+        from psycopg_pool import AsyncConnectionPool
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+        import sys
+        import asyncio
+        
+        # Fix for psycopg async on Windows
+        if sys.platform == "win32":
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
         
         sanitized_url = db_url.replace("postgresql+asyncpg://", "postgresql://")
         
-        # We use a synchronous ConnectionPool managed in the lifespan
-        # This is safe because LangGraph automatically wraps synchronous checkpointers
-        # in an executor when called via astream(), and this avoids Windows async loop errors.
-        app.state.pool = ConnectionPool(conninfo=sanitized_url, max_size=10, open=True, kwargs={"autocommit": True})
-        memory = PostgresSaver(app.state.pool)
-        memory.setup()
+        app.state.pool = AsyncConnectionPool(conninfo=sanitized_url, max_size=10, open=True, kwargs={"autocommit": True})
+        memory = AsyncPostgresSaver(app.state.pool)
+        await memory.setup()
         app.state.agent_graph = builder.compile(checkpointer=memory)
     else:
         from langgraph.checkpoint.memory import MemorySaver
@@ -54,7 +57,7 @@ async def lifespan(app: FastAPI):
     
     # Teardown
     if hasattr(app.state, "pool"):
-        app.state.pool.close()
+        await app.state.pool.close()
 
 app = FastAPI(
     title="BlogFusion API",

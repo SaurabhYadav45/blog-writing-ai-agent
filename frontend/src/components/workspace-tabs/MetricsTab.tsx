@@ -19,6 +19,12 @@ const calculateCost = (model: string, input: number, output: number) => {
       pricing = MODEL_PRICING[key as keyof typeof MODEL_PRICING];
     } else if (m.includes('image')) {
       pricing = MODEL_PRICING['gpt-image-1'];
+    } else if (m === 'gpt') {
+      pricing = MODEL_PRICING['gpt-5.6-sol'];
+    } else if (m === 'claude') {
+      pricing = MODEL_PRICING['Claude-Sonnet-5'];
+    } else if (m === 'gemini') {
+      pricing = MODEL_PRICING['Gemini-3.1-Pro'];
     }
   }
 

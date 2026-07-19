@@ -1,6 +1,8 @@
 from typing import TypedDict, Annotated, List, Literal, Optional
 import operator
 from pydantic import BaseModel, Field
+import os
+from app.core.config import settings
 
 # ------------------------------------------------------------
 # Pydantic Schemas for LangGraph State and structured output

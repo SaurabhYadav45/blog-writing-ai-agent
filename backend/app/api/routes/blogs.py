@@ -52,11 +52,15 @@ def generate_blog(
         HTTPException: 403 error if the user has 0 credits.
     """
     if current_user.credits <= 0:
+        print(f"[DEBUG] User {current_user.email} attempted to generate a blog but has 0 credits.")
         raise HTTPException(status_code=403, detail="Not enough credits to generate a blog.")
         
     premium_models = [llm_models.MODEL_GPT_EXPENSIVE, llm_models.MODEL_CLAUDE_EXPENSIVE, llm_models.MODEL_GEMINI_EXPENSIVE]
     if payload.model_name in premium_models and current_user.plan_name != "Pro":
+        print(f"[DEBUG] User {current_user.email} attempted to use a premium model ({payload.model_name}) without a Pro plan.")
         raise HTTPException(status_code=403, detail="Premium models are a Pro feature. Please upgrade to use this.")
+        
+    print(f"[DEBUG] Blog generation request validated for user {current_user.email}. Creating DB record...")
         
     db_blog = Blog(
         topic=payload.topic,
@@ -97,16 +101,21 @@ async def stream_blog(
         HTTPException: 404 if the blog doesn't exist or is not owned by the user.
         HTTPException: 400 if the blog generation has already completed or erred out.
     """
+    print(f"[DEBUG] SSE stream requested for blog_id {blog_id} by user {current_user.email}")
     db_blog = session.get(Blog, blog_id)
     if not db_blog or db_blog.user_id != current_user.id:
+        print(f"[DEBUG] Blog {blog_id} not found or unauthorized for user {current_user.email}")
         raise HTTPException(status_code=404, detail="Blog not found")
 
     if db_blog.status == "COMPLETED":
+        print(f"[DEBUG] Blog {blog_id} already completed.")
         raise HTTPException(status_code=400, detail="Blog processing already finished.")
 
     # If resuming an errored blog, we must deduct a credit since it was refunded on error
     if db_blog.status == "ERROR":
+        print(f"[DEBUG] Resuming ERRORED blog {blog_id}.")
         if current_user.credits <= 0:
+            print(f"[DEBUG] User {current_user.email} attempted to resume blog but has 0 credits.")
             raise HTTPException(status_code=403, detail="Not enough credits to resume blog generation.")
         current_user.credits -= 1
         session.add(current_user)
@@ -164,7 +173,7 @@ async def stream_blog(
                 # Checkpoint configuration for LangGraph state persistence
                 config = {"configurable": {"thread_id": str(blog_id)}}
                 graph = request.app.state.agent_graph
-                current_state_info = graph.get_state(config)
+                current_state_info = await graph.aget_state(config)
                 
                 if current_state_info.next:
                     # Resume execution from last checkpoint in case of network disconnection
@@ -287,6 +296,10 @@ async def stream_blog(
                     raise ValueError("Graph execution finished but failed to generate blog markdown.")
     
             except Exception as e:
+                import traceback
+                traceback.print_exc()
+                print(f"ERROR DETAILS: {repr(e)}")
+                
                 # Mark blog generation as failed
                 gen_db_blog.status = "ERROR"
                 gen_session.add(gen_db_blog)
@@ -479,6 +492,23 @@ def regenerate_selection(
     ])
     
     new_text = response.content
+    if isinstance(new_text, str):
+        new_text = new_text.strip()
+        if new_text.startswith("```markdown\n"):
+            new_text = new_text[len("```markdown\n"):]
+            if new_text.endswith("```"):
+                new_text = new_text[:-3]
+        elif new_text.startswith("```md\n"):
+            new_text = new_text[len("```md\n"):]
+            if new_text.endswith("```"):
+                new_text = new_text[:-3]
+        elif new_text.startswith("```") and new_text.endswith("```") and not new_text.startswith("```mermaid"):
+            # Generic empty backticks wrapper without a specific language tag
+            lines = new_text.split("\n")
+            if len(lines) > 1 and lines[0].strip() == "```":
+                new_text = "\n".join(lines[1:-1])
+        new_text = new_text.strip()
+        
     return {"new_text": new_text}
 
 class PublishRequest(BaseModel):

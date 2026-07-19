@@ -13,8 +13,7 @@ from app.core.config import settings
 
 # Create the DB Engine using our DATABASE_URL setting.
 # The engine handles connection pooling and communication with Postgres/SQLite.
-# echo=True enables logging generated SQL statements to the console (useful for dev).
-engine = create_engine(settings.DATABASE_URL, echo=True)
+engine = create_engine(settings.DATABASE_URL, echo=False)
 
 def init_db():
     """
