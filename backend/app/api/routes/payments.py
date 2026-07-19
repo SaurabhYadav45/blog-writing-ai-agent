@@ -72,7 +72,7 @@ def verify_payment(
         current_user.plan_name = "Pro"
         current_user.credits += 50
         
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         if current_user.plan_expires_at and current_user.plan_expires_at > now:
             current_user.plan_expires_at = current_user.plan_expires_at + timedelta(days=30)
         else:
@@ -96,7 +96,7 @@ def verify_payment(
         background_tasks.add_task(
             send_payment_receipt_email,
             email_to=current_user.email,
-            amount_inr=amount_in_inr,
+            amount_inr=499,
             order_id=payment_data.razorpay_order_id,
             plan_name=current_user.plan_name
         )
