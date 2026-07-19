@@ -3,6 +3,8 @@ sqlmodel
 psycopg2-binary
 langgraph
 langchain-openai
+langchain-anthropic
+langchain-google-genai
 langchain-core
 langchain-tavily
 openai
@@ -17,3 +19,8 @@ python-multipart
 google-auth
 alembic
 razorpay
+langgraph-checkpoint-postgres
+psycopg-pool
+psycopg[binary]
+slowapi
+gunicorn  

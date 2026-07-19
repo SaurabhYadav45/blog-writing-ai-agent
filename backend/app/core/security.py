@@ -40,6 +40,27 @@ def create_access_token(subject: Union[str, Any], expires_delta: Optional[timede
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+def create_password_reset_token(email: str) -> str:
+    """
+    Creates a signed JWT used for resetting passwords, expiring in 15 minutes.
+    """
+    expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+    to_encode = {"exp": expire, "sub": email, "type": "reset_password"}
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+def verify_password_reset_token(token: str) -> Optional[str]:
+    """
+    Verifies a password reset token and returns the associated email.
+    """
+    try:
+        decoded_token = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if decoded_token.get("type") != "reset_password":
+            return None
+        return decoded_token.get("sub")
+    except jwt.PyJWTError:
+        return None
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     Verifies that a plain text password matches its stored hash.

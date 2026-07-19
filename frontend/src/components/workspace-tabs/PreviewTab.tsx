@@ -31,6 +31,8 @@ export interface PreviewTabProps {
   isPublishing?: boolean;
   onPromote?: (platform: string) => Promise<void>;
   isPromoting?: boolean;
+  streamStatus?: string;
+  onResume?: () => void;
 }
 
 export const PreviewTab: React.FC<PreviewTabProps> = ({
@@ -44,7 +46,9 @@ export const PreviewTab: React.FC<PreviewTabProps> = ({
   onPublish,
   isPublishing,
   onPromote,
-  isPromoting
+  isPromoting,
+  streamStatus,
+  onResume
 }) => {
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -196,7 +200,25 @@ export const PreviewTab: React.FC<PreviewTabProps> = ({
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-4 min-h-[400px]">
-          {isGenerating ? (
+          {streamStatus === 'error' ? (
+            <>
+              <div className="w-20 h-20 rounded-full bg-red-50 flex items-center justify-center border border-red-100 mb-2">
+                 <img src="/icon.png" alt="icon" className="w-10 h-10 opacity-40 grayscale sepia hue-rotate-320" />
+              </div>
+              <p className="font-semibold text-lg text-red-600">Generation Interrupted</p>
+              <p className="text-sm text-slate-500 max-w-md text-center">
+                This blog generation was interrupted. You can resume it from the last saved state without wasting credits.
+              </p>
+              {onResume && (
+                <button 
+                  onClick={onResume}
+                  className="px-5 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-bold shadow-md shadow-orange-500/20 transition-all cursor-pointer mt-2"
+                >
+                  Resume Generation
+                </button>
+              )}
+            </>
+          ) : isGenerating ? (
             <>
               <Loader2 className="w-12 h-12 animate-spin text-orange-400" />
               <p className="font-medium text-slate-500 text-lg">{streamMessage || "Drafting in progress..."}</p>

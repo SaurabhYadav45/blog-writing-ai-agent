@@ -165,12 +165,12 @@ export const Dashboard = () => {
             <p className="text-xs font-semibold text-gray-500 tracking-wider uppercase mb-1">Remaining Credits</p>
             <div className="flex items-baseline gap-2">
               <h2 className="text-2xl font-bold text-gray-900">{stats?.remaining_credits || 0}</h2>
-              <span className="text-gray-400 font-medium text-sm">/ {stats?.total_credits_per_account || 5}</span>
+              <span className="text-gray-400 font-medium text-sm">/ {stats?.total_credits_per_account || 1}</span>
             </div>
             <div className="w-full bg-gray-100 h-1.5 rounded-full mt-4 overflow-hidden">
               <div 
                 className={`h-full rounded-full ${stats?.remaining_credits <= 1 ? 'bg-red-500' : 'bg-gradient-to-r from-orange-400 to-orange-500'}`}
-                style={{ width: `${Math.min(100, Math.max(0, ((stats?.remaining_credits || 0) / (stats?.total_credits_per_account || 5)) * 100))}%` }}
+                style={{ width: `${Math.min(100, Math.max(0, ((stats?.remaining_credits || 0) / (stats?.total_credits_per_account || 1)) * 100))}%` }}
               />
             </div>
           </motion.div>

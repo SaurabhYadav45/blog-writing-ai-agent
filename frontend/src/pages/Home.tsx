@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -9,12 +9,21 @@ import {
   Check, X, Star, Shield, ChevronDown
 } from 'lucide-react';
 import { Navbar } from '../components/Navbar';
+import { Footer } from '../components/Footer';
 
 export const Home = () => {
   const { token } = useAuth();
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
-
+  const blobConfigs = useMemo(() => {
+    return [...Array(6)].map(() => ({
+      top: `${Math.random() * 100}%`,
+      left: `${Math.random() * 100}%`,
+      x: [0, Math.random() * 100 - 50],
+      y: [0, Math.random() * 100 - 50],
+      duration: Math.random() * 10 + 10,
+    }));
+  }, []);
 
   return (
     <div className="flex flex-col items-center bg-[#FFFAF3]">
@@ -285,21 +294,21 @@ export const Home = () => {
       <section id="pricing" className="w-full py-16 sm:py-24 relative overflow-hidden">
         {/* Background animated elements */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          {[...Array(6)].map((_, i) => (
+          {blobConfigs.map((config, i) => (
             <motion.div
               key={i}
               className="absolute w-64 h-64 rounded-full bg-gradient-to-r from-orange-100/30 to-orange-200/20 blur-3xl"
               style={{
-                top: `${Math.random() * 100}%`,
-                left: `${Math.random() * 100}%`,
+                top: config.top,
+                left: config.left,
               }}
               animate={{
-                x: [0, Math.random() * 100 - 50],
-                y: [0, Math.random() * 100 - 50],
+                x: config.x,
+                y: config.y,
                 scale: [1, 1.2, 1],
               }}
               transition={{
-                duration: Math.random() * 10 + 10,
+                duration: config.duration,
                 repeat: Infinity,
                 repeatType: "reverse",
                 ease: "easeInOut"
@@ -342,9 +351,9 @@ export const Home = () => {
                 <ul className="space-y-3 mb-8 text-left w-full max-w-[260px] flex-1">
                   {[
                     { text: "3 AI Blogs per month", included: true },
-                    { text: `${MODEL_NAMES.GPT_CHEAP} model`, included: true },
+                    { text: "GPT model", included: true },
                     { text: "Basic web research", included: true },
-                    { text: `${MODEL_NAMES.CLAUDE_CHEAP} access`, included: false },
+                    { text: "Claude access", included: false },
                     { text: "Custom Image Generation", included: false },
                     { text: "Priority Support", included: false },
                   ].map((item, i) => (
@@ -384,9 +393,9 @@ export const Home = () => {
                   <ul className="space-y-3 mb-8 text-left w-full max-w-[260px] flex-1">
                     {[
                       { text: "Unlimited AI Blogs", included: true },
-                      { text: `${MODEL_NAMES.GPT_EXPENSIVE} model`, included: true },
+                      { text: "GPT model", included: true },
                       { text: "Deep web research", included: true },
-                      { text: `${MODEL_NAMES.CLAUDE_EXPENSIVE} access`, included: true },
+                      { text: "Claude access", included: true },
                       { text: "Custom Image Generation", included: true },
                       { text: "Priority Support", included: true },
                     ].map((item, i) => (
@@ -410,7 +419,7 @@ export const Home = () => {
       </section>
 
       {/* 5. FAQ Section */}
-      <section id="faq" className="w-full max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-24 mb-10">
+      <section id="faq" className="w-full max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16 mb-10">
         <h2 className="text-3xl md:text-4xl font-bold tracking-tighter text-gray-900 mb-12 text-center">Frequently Asked Questions</h2>
         <div className="space-y-1">
           {[
@@ -479,43 +488,7 @@ export const Home = () => {
       </section>
 
       {/* 6. Footer */}
-      <footer 
-        className="w-full relative pt-10 pb-16 mt-auto"
-        style={{
-            backgroundImage: `url(/Footer.png)`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'bottom center',
-            backgroundRepeat: 'no-repeat'
-        }}
-      >
-        <div className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'>
-          <Link to="/" className="flex items-center gap-2">
-            <img src="/icon.png" alt="icon" className="w-8 h-8 rounded-lg shadow-sm object-cover" />
-            <span className="font-extrabold text-xl tracking-tight text-gray-900">
-              BlogFusion
-            </span>
-          </Link>
-        </div>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-end mt-12">
-          {/* Left Side: Watermark & Copyright */}
-          <div className="flex flex-col mb-8 md:mb-0">
-            <h2 className="text-5xl sm:text-6xl md:text-7xl font-bold text-slate-400/60 tracking-tight mb-3">
-              BlogFusion
-            </h2>
-            <p className="text-xs text-slate-600 font-medium">
-              copyright © 2026 BlogFusion
-            </p>
-          </div>
-          
-          {/* Right Side: Links */}
-          <div className="flex flex-wrap items-center gap-6 sm:gap-8 text-sm text-slate-600 font-medium pb-2">
-            <a href="#" className="hover:text-slate-900 transition-colors">Privacy Policy</a>
-            <a href="#" className="hover:text-slate-900 transition-colors">Terms of Service</a>
-            <a href="#" className="hover:text-slate-900 transition-colors">Contact Us</a>
-            <a href="#" className="hover:text-slate-900 transition-colors">Feedback</a>
-          </div>
-        </div>
-      </footer>
+      <Footer />
 
     </div>
   );

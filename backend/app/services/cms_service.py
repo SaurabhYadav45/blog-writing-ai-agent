@@ -23,9 +23,13 @@ def publish_to_wordpress(blog: Blog, user: User) -> str:
         raise CMSPublishError("WordPress credentials are not configured.")
         
     # WordPress REST API payload
+    from markdown_it import MarkdownIt
+    md = MarkdownIt()
+    html_content = md.render(blog.markdown_content)
+    
     payload = {
         "title": blog.topic,
-        "content": blog.markdown_content,
+        "content": html_content,
         "status": "publish"
     }
     
@@ -92,8 +96,10 @@ def share_to_linkedin(blog: Blog, user: User, post_text: str) -> str:
         "Content-Type": "application/json"
     }
     
+    urn_str = author_urn if author_urn.startswith("urn:li:person:") else f"urn:li:person:{author_urn}"
+    
     payload = {
-        "author": f"urn:li:person:{author_urn}",
+        "author": urn_str,
         "lifecycleState": "PUBLISHED",
         "specificContent": {
             "com.linkedin.ugc.ShareContent": {

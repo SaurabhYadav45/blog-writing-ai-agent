@@ -16,7 +16,7 @@ from app.core.config import settings
 from app.core import llm_models
 from app.services.cloudinary_service import upload_image_bytes
 from app.services.agent.prompt import ROUTER_SYSTEM_PROMPT, RESEARCH_SYSTEM_PROMPT, PLANNER_SYSTEM_PROMPT, WORKER_SYSTEM_PROMPT, DECIDE_IMAGES_SYSTEM_PROMPT, EDITOR_SYSTEM_PROMPT
-from app.services.agent.state import BlogState, Task, Plan, EvidenceItem, EvidencePack, RouterDecision, ImageSpec, GlobalImagePlan, SEOMetadata, EditorOutput
+from app.services.agent.state import BlogState, Task, Plan, EvidenceItem, EvidencePack, RouterDecision, ImageSpec, GlobalImagePlan, SEOMetadata, EditorOutput, fetch_youtube_video
 
 os.environ["TAVILY_API_KEY"] = settings.TAVILY_API_KEY
 
@@ -30,19 +30,25 @@ def get_llm(state: dict, expensive: bool = True):
     
     if "claude" in model_name:
         if expensive:
-            return ChatAnthropic(model=llm_models.MODEL_CLAUDE_EXPENSIVE, api_key=settings.ANTHROPIC_API_KEY)
+            real_model = llm_models.REAL_MODEL_MAP.get(llm_models.MODEL_CLAUDE_EXPENSIVE, "claude-3-5-sonnet-20240620")
+            return ChatAnthropic(model=real_model, api_key=settings.ANTHROPIC_API_KEY)
         else:
-            return ChatAnthropic(model=llm_models.MODEL_CLAUDE_CHEAP, api_key=settings.ANTHROPIC_API_KEY)
+            real_model = llm_models.REAL_MODEL_MAP.get(llm_models.MODEL_CLAUDE_CHEAP, "claude-3-haiku-20240307")
+            return ChatAnthropic(model=real_model, api_key=settings.ANTHROPIC_API_KEY)
     elif "gemini" in model_name:
         if expensive:
-            return ChatGoogleGenerativeAI(model=llm_models.MODEL_GEMINI_EXPENSIVE, api_key=settings.GOOGLE_API_KEY)
+            real_model = llm_models.REAL_MODEL_MAP.get(llm_models.MODEL_GEMINI_EXPENSIVE, "gemini-1.5-pro")
+            return ChatGoogleGenerativeAI(model=real_model, api_key=settings.GOOGLE_API_KEY)
         else:
-            return ChatGoogleGenerativeAI(model=llm_models.MODEL_GEMINI_CHEAP, api_key=settings.GOOGLE_API_KEY)
+            real_model = llm_models.REAL_MODEL_MAP.get(llm_models.MODEL_GEMINI_CHEAP, "gemini-1.5-flash")
+            return ChatGoogleGenerativeAI(model=real_model, api_key=settings.GOOGLE_API_KEY)
     else:
         if expensive:
-            return ChatOpenAI(model=llm_models.MODEL_GPT_EXPENSIVE, api_key=settings.OPENAI_API_KEY)
+            real_model = llm_models.REAL_MODEL_MAP.get(llm_models.MODEL_GPT_BALANCED, "gpt-4o")
+            return ChatOpenAI(model=real_model, api_key=settings.OPENAI_API_KEY)
         else:
-            return ChatOpenAI(model=llm_models.MODEL_GPT_CHEAP, api_key=settings.OPENAI_API_KEY)
+            real_model = llm_models.REAL_MODEL_MAP.get(llm_models.MODEL_GPT_CHEAP, "gpt-4o-mini")
+            return ChatOpenAI(model=real_model, api_key=settings.OPENAI_API_KEY)
 
 def extract_usage(raw, node_name: str, model_name: str):
     """

@@ -18,7 +18,8 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     
     # Security Configuration settings
-    SECRET_KEY: str = "super_secret_key_change_me_in_production"
+    from pydantic import Field
+    SECRET_KEY: str = Field(default_factory=lambda: __import__('secrets').token_hex(32))
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # Default expiration: 7 days
     
@@ -43,6 +44,17 @@ class Settings(BaseSettings):
     
     # YouTube API Key for searching contextually relevant videos to embed in blogs
     YOUTUBE_API_KEY: str = ""
+    
+    # Brevo Configuration for sending emails (OTP, Receipts, etc)
+    BREVO_API_KEY: str = ""
+    EMAILS_FROM_EMAIL: str = "noreply@blogfusion.ai"
+    EMAILS_FROM_NAME: str = "BlogFusion AI"
+    
+    # Frontend URL used for generating links in emails
+    FRONTEND_URL: str = "http://localhost:5173"
+    
+    # CORS Origins
+    BACKEND_CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
     
     # Settings configuration: direct Pydantic to read from a local .env file
     # and ignore extra keys that are not declared above.

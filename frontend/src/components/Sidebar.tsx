@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { ConfigForm } from './ConfigForm';
 import { ConfirmModal } from './ConfirmModal';
 import { getBlogs, deleteBlog, updateBlogTitle } from '../services/blogs';
+import { Link } from 'react-router-dom';
 
 
 interface Blog {
@@ -18,19 +19,23 @@ interface SidebarProps {
   onGenerate: (topic: string, tone: string, audience: string, depth: string, referenceUrls: string) => void;
   isGenerating: boolean;
   clearSignal: number;
+  onViewFullHistory: () => void;
 }
 
-export function Sidebar({ onSelectBlog, onGenerate, isGenerating, clearSignal }: SidebarProps) {
+export function Sidebar({ onSelectBlog, onGenerate, isGenerating, clearSignal, onViewFullHistory }: SidebarProps) {
   const [blogs, setBlogs] = useState<Blog[]>([]);
   const [loading, setLoading] = useState(true);
   const { token } = useAuth();
   
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [blogToDelete, setBlogToDelete] = useState<number | null>(null);
+  
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editTopic, setEditTopic] = useState("");
 
   const fetchBlogs = async () => {
     try {
-      const response = await getBlogs(token || '');
+      const response = await getBlogs(token || '', 0, 5);
       const data = await response.json();
       if (Array.isArray(data)) {
         setBlogs(data);
@@ -77,22 +82,25 @@ export function Sidebar({ onSelectBlog, onGenerate, isGenerating, clearSignal }:
     setBlogToDelete(null);
   };
 
-  const handleRenameBlog = async (id: number, currentTopic: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const newTopic = window.prompt("Enter new blog title:", currentTopic);
-    if (!newTopic || newTopic === currentTopic) return;
+  const handleRenameSubmit = async (id: number) => {
+    if (!editTopic || editTopic.trim() === '') {
+      setEditingId(null);
+      return;
+    }
     try {
-      await updateBlogTitle(id, newTopic, token || '');
-      setBlogs(prev => prev.map(b => b.id === id ? { ...b, topic: newTopic } : b));
+      await updateBlogTitle(id, editTopic, token || '');
+      setBlogs(prev => prev.map(b => b.id === id ? { ...b, topic: editTopic } : b));
     } catch (err) {
       console.error(err);
+    } finally {
+      setEditingId(null);
     }
   };
 
   return (
     <div className="w-full md:w-80 glass-sidebar flex flex-col h-full md:h-screen overflow-y-auto custom-scrollbar bg-white/70">
       <div className="p-6 pb-2">
-        <div className="flex items-center gap-3 mb-2">
+        {/* <div className="flex items-center gap-3 mb-2">
           <div className="w-10 h-10 rounded-xl overflow-hidden shadow-lg shadow-orange-500/30 border border-orange-200">
             <img src="/icon.png" alt="BlogFusion Icon" className="w-full h-full object-cover" />
           </div>
@@ -101,9 +109,15 @@ export function Sidebar({ onSelectBlog, onGenerate, isGenerating, clearSignal }:
               BlogFusion
             </h1>
           </div>
-        </div>
-        <div className="mt-1">
-          <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-orange-100/60 border border-orange-200/60 text-xs font-bold text-orange-700 uppercase tracking-wide">
+        </div> */}
+        <Link to="/" className="flex items-center gap-3">
+          <img src="/icon.png" alt="icon" className="w-8 h-8 rounded-lg shadow-sm object-cover" />
+          <span className="font-extrabold text-xl tracking-tight text-gray-900">
+            BlogFusion
+          </span>
+        </Link>
+        <div className="mt-2">
+          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-100/60 border border-orange-200/60 text-xs font-bold text-orange-700 uppercase tracking-wide">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
@@ -128,37 +142,71 @@ export function Sidebar({ onSelectBlog, onGenerate, isGenerating, clearSignal }:
             {blogs.map(blog => (
               <li key={blog.id}>
                 <div 
-                  onClick={() => onSelectBlog(blog.id)}
+                  onClick={() => {
+                    if (editingId !== blog.id) onSelectBlog(blog.id);
+                  }}
                   className="cursor-pointer w-full text-left p-2.5 rounded-lg hover:bg-white/50 border border-transparent hover:border-orange-100 transition-all flex items-center justify-between group"
                 >
-                  <div className="truncate pr-2">
-                    <p className="text-sm font-semibold text-slate-700 truncate">{blog.topic}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      {new Date(blog.created_at + 'Z').toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} &middot; 
-                      <span className={blog.status === 'ERROR' ? 'text-red-500 ml-1 font-bold' : 'text-orange-500 ml-1'}>
-                        {blog.status}
-                      </span>
-                    </p>
+                  <div className="truncate pr-2 flex-1">
+                    {editingId === blog.id ? (
+                      <input 
+                        type="text"
+                        value={editTopic}
+                        autoFocus
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => setEditTopic(e.target.value)}
+                        onBlur={() => handleRenameSubmit(blog.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleRenameSubmit(blog.id);
+                          if (e.key === 'Escape') setEditingId(null);
+                        }}
+                        className="w-full text-sm font-semibold text-slate-700 bg-white border border-orange-300 rounded px-1 py-0.5 outline-none"
+                      />
+                    ) : (
+                      <>
+                        <p className="text-sm font-semibold text-slate-700 truncate">{blog.topic}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {new Date(blog.created_at + 'Z').toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} &middot; 
+                          <span className={blog.status === 'ERROR' ? 'text-red-500 ml-1 font-bold' : 'text-orange-500 ml-1'}>
+                            {blog.status}
+                          </span>
+                        </p>
+                      </>
+                    )}
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button 
-                      onClick={(e) => handleRenameBlog(blog.id, blog.topic, e)}
-                      className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded"
-                      title="Rename Blog"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button 
-                      onClick={(e) => handleDeleteClick(blog.id, e)}
-                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded"
-                      title="Delete Blog"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  {!editingId && (
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingId(blog.id);
+                          setEditTopic(blog.topic);
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded"
+                        title="Rename Blog"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button 
+                        onClick={(e) => handleDeleteClick(blog.id, e)}
+                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded"
+                        title="Delete Blog"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </li>
             ))}
+            <li className="pt-2 text-center">
+              <button 
+                onClick={onViewFullHistory} 
+                className="w-full text-xs font-semibold text-orange-500 hover:text-white bg-orange-50 hover:bg-orange-500 px-3 py-2 rounded-xl transition-colors shadow-sm cursor-pointer"
+              >
+                See full history
+              </button>
+            </li>
           </ul>
         )}
       </div>

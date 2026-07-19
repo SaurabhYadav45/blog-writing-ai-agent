@@ -18,8 +18,9 @@ from app.core.db import get_session
 from app.models.blog import Blog
 from app.models.user import User
 from app.api.deps import get_current_user, get_current_user_from_query
-from app.services.agent import graph
+# Graph is injected via request.app.state
 from app.core import llm_models
+from app.core.limiter import limiter
 
 router = APIRouter()
 
@@ -35,7 +36,9 @@ class BlogGenerateRequest(BaseModel):
     reference_urls: str = ""
 
 @router.post("/generate")
+@limiter.limit("10/minute")
 def generate_blog(
+    request: Request,
     payload: BlogGenerateRequest, 
     session: Session = Depends(get_session), 
     current_user: User = Depends(get_current_user)
@@ -98,8 +101,17 @@ async def stream_blog(
     if not db_blog or db_blog.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Blog not found")
 
-    if db_blog.status in ["COMPLETED", "ERROR"]:
+    if db_blog.status == "COMPLETED":
         raise HTTPException(status_code=400, detail="Blog processing already finished.")
+
+    # If resuming an errored blog, we must deduct a credit since it was refunded on error
+    if db_blog.status == "ERROR":
+        if current_user.credits <= 0:
+            raise HTTPException(status_code=403, detail="Not enough credits to resume blog generation.")
+        current_user.credits -= 1
+        session.add(current_user)
+        session.commit()
+        session.refresh(db_blog)
 
     async def event_generator():
         # Establish a fresh session specifically for generator iterations
@@ -151,6 +163,7 @@ async def stream_blog(
                 
                 # Checkpoint configuration for LangGraph state persistence
                 config = {"configurable": {"thread_id": str(blog_id)}}
+                graph = request.app.state.agent_graph
                 current_state_info = graph.get_state(config)
                 
                 if current_state_info.next:
@@ -277,6 +290,13 @@ async def stream_blog(
                 # Mark blog generation as failed
                 gen_db_blog.status = "ERROR"
                 gen_session.add(gen_db_blog)
+                
+                # Refund credit
+                user_to_refund = gen_session.get(User, gen_db_blog.user_id)
+                if user_to_refund:
+                    user_to_refund.credits += 1
+                    gen_session.add(user_to_refund)
+                
                 gen_session.commit()
                 
                 error_info = {"status": "error", "message": f"Workflow failed: {str(e)}"}
@@ -285,11 +305,22 @@ async def stream_blog(
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @router.get("/")
-def list_blogs(session: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
+def list_blogs(
+    limit: int = 10,
+    offset: int = 0,
+    session: Session = Depends(get_session), 
+    current_user: User = Depends(get_current_user)
+):
     """
     List historically completed or errored blogs owned by the authenticated user.
     """
-    statement = select(Blog).where(Blog.status.in_(["COMPLETED", "ERROR"]), Blog.user_id == current_user.id).order_by(Blog.created_at.desc())
+    statement = (
+        select(Blog)
+        .where(Blog.status.in_(["COMPLETED", "ERROR"]), Blog.user_id == current_user.id)
+        .order_by(Blog.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
     results = session.exec(statement).all()
     return results
 
@@ -416,14 +447,19 @@ def regenerate_selection(
     from langchain_core.messages import SystemMessage, HumanMessage
     from app.core.config import settings
     
-    # Initialize the correct LLM provider
+    # Initialize the correct LLM provider based on requested model
     m = payload.model_name.lower()
+    
+    # Get the real underlying API model string
+    real_model = llm_models.REAL_MODEL_MAP.get(payload.model_name, "gpt-4o-mini")
+    
+    # If the user is requesting an expensive model, we already validated they are Pro above.
     if "claude" in m:
-        llm = ChatAnthropic(model=llm_models.MODEL_CLAUDE_EXPENSIVE, api_key=settings.ANTHROPIC_API_KEY)
+        llm = ChatAnthropic(model=real_model, api_key=settings.ANTHROPIC_API_KEY)
     elif "gemini" in m:
-        llm = ChatGoogleGenerativeAI(model=llm_models.MODEL_GEMINI_EXPENSIVE, api_key=settings.GOOGLE_API_KEY)
+        llm = ChatGoogleGenerativeAI(model=real_model, api_key=settings.GOOGLE_API_KEY)
     else:
-        llm = ChatOpenAI(model=llm_models.MODEL_GPT_EXPENSIVE, api_key=settings.OPENAI_API_KEY)
+        llm = ChatOpenAI(model=real_model, api_key=settings.OPENAI_API_KEY)
         
     system_prompt = (
         "You are an expert technical editor. Rewrite the provided selected text based on the user's instructions. "

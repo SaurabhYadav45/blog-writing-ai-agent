@@ -6,8 +6,10 @@ export interface HistoryTabProps {
   historyBlogs: any[];
   onSelectBlog?: (id: number) => void;
   setActiveTab: (tab: string) => void;
-  handleRenameHistory: (id: number, currentTopic: string, e: React.MouseEvent) => void;
+  handleRenameHistory: (id: number, newTopic: string) => void;
   handleDeleteClick: (id: number, e: React.MouseEvent) => void;
+  loadMoreHistory?: () => void;
+  hasMoreHistory?: boolean;
 }
 
 export const HistoryTab: React.FC<HistoryTabProps> = ({
@@ -16,8 +18,20 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
   onSelectBlog,
   setActiveTab,
   handleRenameHistory,
-  handleDeleteClick
+  handleDeleteClick,
+  loadMoreHistory,
+  hasMoreHistory
 }) => {
+  const [editingId, setEditingId] = React.useState<number | null>(null);
+  const [editTopic, setEditTopic] = React.useState<string>("");
+
+  const submitRename = (id: number) => {
+    if (editingId === id) {
+      handleRenameHistory(id, editTopic);
+      setEditingId(null);
+    }
+  };
+
   return (
     <div className="h-full bg-slate-50/50 rounded-xl p-4 md:p-8 overflow-y-auto shadow-sm border border-slate-200">
       <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight mb-6">Blog Generation History</h2>
@@ -38,22 +52,39 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
           {historyBlogs.map(blog => (
             <div key={blog.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col hover:shadow-md hover:border-orange-200 transition-all">
               <div className="p-5 flex-1">
-                <div className="flex justify-between items-start mb-3">
+                <div className="flex justify-between items-start mb-2">
                   <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${blog.status === 'ERROR' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
                     {blog.status}
                   </span>
                   <span className="text-xs text-slate-400 font-medium">ID: {blog.id}</span>
                 </div>
-                <h3 className="font-bold text-slate-800 text-lg leading-snug mb-2 line-clamp-2" title={blog.topic}>
-                  {blog.topic}
-                </h3>
-                <div className="text-sm text-slate-500 mb-4 flex items-center gap-2">
+                <div className="min-h-10 mb-1">
+                  {editingId === blog.id ? (
+                    <input 
+                      type="text"
+                      value={editTopic}
+                      autoFocus
+                      onChange={(e) => setEditTopic(e.target.value)}
+                      onBlur={() => submitRename(blog.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') submitRename(blog.id);
+                        if (e.key === 'Escape') setEditingId(null);
+                      }}
+                      className="w-full text-lg font-bold text-slate-800 bg-white border border-orange-300 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-orange-200"
+                    />
+                  ) : (
+                    <h3 className="font-bold text-slate-800 text-lg leading-snug line-clamp-2" title={blog.topic}>
+                      {blog.topic}
+                    </h3>
+                  )}
+                </div>
+                <div className="text-sm text-slate-500 mb-1 flex items-center gap-2">
                   <span>{new Date(blog.created_at + 'Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                   &middot;
                   <span>{new Date(blog.created_at + 'Z').toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
               </div>
-              <div className="p-4 bg-slate-50 border-t border-slate-100 mt-auto flex items-center gap-2">
+              <div className="p-3 bg-slate-50 border-t border-slate-100 mt-auto flex items-center gap-2">
                 <button 
                   onClick={() => {
                     if (onSelectBlog) onSelectBlog(blog.id);
@@ -64,7 +95,10 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
                   Load Blog
                 </button>
                 <button 
-                  onClick={(e) => handleRenameHistory(blog.id, blog.topic, e)}
+                  onClick={() => {
+                    setEditingId(blog.id);
+                    setEditTopic(blog.topic);
+                  }}
                   className="p-2 cursor-pointer bg-white border border-slate-200 text-slate-500 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors"
                   title="Rename"
                 >
@@ -80,6 +114,17 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
               </div>
             </div>
           ))}
+        </div>
+      )}
+      
+      {hasMoreHistory && historyBlogs.length > 0 && !loadingHistory && (
+        <div className="mt-8 flex justify-center">
+          <button 
+            onClick={loadMoreHistory}
+            className="px-6 py-2.5 rounded-full bg-white border border-slate-200 text-slate-600 font-bold hover:text-orange-600 hover:border-orange-300 hover:shadow-sm transition-all"
+          >
+            Load More Blogs
+          </button>
         </div>
       )}
     </div>

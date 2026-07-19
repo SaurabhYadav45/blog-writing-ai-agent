@@ -36,7 +36,8 @@ def update_user_me(
     user_data = user_in.model_dump(exclude_unset=True)
     
     if "brand_persona" in user_data and user_data["brand_persona"] and current_user.plan_name != "Pro":
-        raise HTTPException(status_code=403, detail="Custom Brand Persona is a Pro feature.")
+        if user_data["brand_persona"] not in ["Casual", "Professional", "Humorous", "Technical"]:
+            raise HTTPException(status_code=403, detail="Custom Brand Persona is a Pro feature.")
         
     for key, value in user_data.items():
         setattr(current_user, key, value)
@@ -138,7 +139,7 @@ def get_user_dashboard(current_user: User = Depends(get_current_user), session: 
     time_saved_hours = total_blogs_generated * 3
     avg_words = int(total_words / completed_blogs_count) if completed_blogs_count > 0 else 0
     
-    total_credits_capacity = max(current_user.credits, 55 if current_user.plan_name == "Pro" else 5)
+    total_credits_capacity = max(current_user.credits, 50 if current_user.plan_name == "Pro" else 1)
     
     return {
         "current_plan": current_user.plan_name,
@@ -153,3 +154,28 @@ def get_user_dashboard(current_user: User = Depends(get_current_user), session: 
         "kind_chart_data": kind_chart_data,
         "activity_chart_data": activity_chart_data
     }
+
+@router.delete("/me")
+def delete_user_me(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Permanently delete the current user and all their associated blogs.
+    """
+    # Delete all blogs owned by the user
+    statement = select(Blog).where(Blog.user_id == current_user.id)
+    blogs = session.exec(statement).all()
+    for blog in blogs:
+        session.delete(blog)
+        
+    # Delete all payment transactions owned by the user
+    from app.models.payment import PaymentTransaction
+    statement = select(PaymentTransaction).where(PaymentTransaction.user_id == current_user.id)
+    payments = session.exec(statement).all()
+    for payment in payments:
+        session.delete(payment)
+        
+    session.delete(current_user)
+    session.commit()
+    return {"status": "success"}

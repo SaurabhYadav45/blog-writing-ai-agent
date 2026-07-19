@@ -37,24 +37,29 @@ interface MainWorkspaceProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   onDeleteBlog?: (id: number) => void;
+  onResume?: (blogId: number) => void;
 }
 
 export const MainWorkspace: React.FC<MainWorkspaceProps> = ({ 
   isGenerating,
   selectedModel,
   onModelSelect,
+  streamStatus,
   streamMessage, logs, plan, evidence, metrics, latency, finalMarkdown, seoMetadata,
   onSelectBlog,
   selectedBlogId,
   activeTab,
   setActiveTab,
-  onDeleteBlog
+  onDeleteBlog,
+  onResume
 }: MainWorkspaceProps) => {
   const { token } = useAuth();
   const [copied, setCopied] = useState(false);
   const [isTocCollapsed, setIsTocCollapsed] = useState(false);
   const [historyBlogs, setHistoryBlogs] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyOffset, setHistoryOffset] = useState(0);
+  const [hasMoreHistory, setHasMoreHistory] = useState(true);
   
   // New States for Editor and Regenerate Feature
   const [editableMarkdown, setEditableMarkdown] = useState(finalMarkdown || "");
@@ -215,11 +220,13 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
   useEffect(() => {
     if (activeTab === 'History') {
       setLoadingHistory(true);
-      getBlogs(token || '')
+      getBlogs(token || '', 0, 10)
         .then(res => res.json())
         .then(data => {
           if (Array.isArray(data)) {
             setHistoryBlogs(data);
+            setHistoryOffset(0);
+            setHasMoreHistory(data.length === 10);
           } else {
             console.error("Expected array but got:", data);
             setHistoryBlogs([]);
@@ -229,6 +236,23 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
         .finally(() => setLoadingHistory(false));
     }
   }, [activeTab]);
+
+  const loadMoreHistory = async () => {
+    const newOffset = historyOffset + 10;
+    try {
+      const res = await getBlogs(token || '', newOffset, 10);
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        setHistoryBlogs(prev => [...prev, ...data]);
+        setHistoryOffset(newOffset);
+        if (data.length < 10) setHasMoreHistory(false);
+      } else {
+        setHasMoreHistory(false);
+      }
+    } catch (err) {
+      console.error("Error fetching more history:", err);
+    }
+  };
 
   const handleDeleteClick = (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -255,10 +279,8 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
     setBlogToDelete(null);
   };
 
-  const handleRenameHistory = async (id: number, currentTopic: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const newTopic = window.prompt("Enter new blog title:", currentTopic);
-    if (!newTopic || newTopic === currentTopic) return;
+  const handleRenameHistory = async (id: number, newTopic: string) => {
+    if (!newTopic || newTopic.trim() === '') return;
     try {
       await updateBlogTitle(id, newTopic, token || '');
       setHistoryBlogs(prev => prev.map(b => b.id === id ? { ...b, topic: newTopic } : b));
@@ -315,6 +337,8 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
           setActiveTab={setActiveTab}
           handleRenameHistory={handleRenameHistory}
           handleDeleteClick={handleDeleteClick}
+          loadMoreHistory={loadMoreHistory}
+          hasMoreHistory={hasMoreHistory}
         />
       );
     }
@@ -348,6 +372,8 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
         isPublishing={isPublishing}
         onPromote={handlePromote}
         isPromoting={isPromoting}
+        streamStatus={streamStatus}
+        onResume={() => selectedBlogId && onResume && onResume(selectedBlogId)}
       />
     );
   };

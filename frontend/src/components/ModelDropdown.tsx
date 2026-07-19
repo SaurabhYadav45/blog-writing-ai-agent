@@ -27,18 +27,14 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({ selectedModel, onM
   }, []);
 
   const models = [
-    { id: MODEL_NAMES.GPT_EXPENSIVE, icon: Bot, desc: 'Most Capable' },
-    { id: MODEL_NAMES.GPT_CHEAP, icon: Bot, desc: 'Cost-Efficient' },
-    { id: MODEL_NAMES.CLAUDE_EXPENSIVE, icon: Cpu, desc: 'Best Reasoning' },
-    { id: MODEL_NAMES.CLAUDE_CHEAP, icon: Cpu, desc: 'High-Volume' },
-    { id: MODEL_NAMES.GEMINI_EXPENSIVE, icon: Sparkles, desc: 'Advanced Logic' },
-    { id: MODEL_NAMES.GEMINI_CHEAP, icon: Sparkles, desc: 'Fastest' }
+    { id: 'GPT', icon: Bot, desc: 'OpenAI Models' },
+    { id: 'Claude', icon: Cpu, desc: 'Anthropic Models' },
+    { id: 'Gemini', icon: Sparkles, desc: 'Google Models' }
   ];
 
   const premiumModels = [
-    MODEL_NAMES.GPT_EXPENSIVE,
-    MODEL_NAMES.CLAUDE_EXPENSIVE,
-    MODEL_NAMES.GEMINI_EXPENSIVE
+    'Claude',
+    'Gemini'
   ];
 
   const currentModel = models.find(m => m.id === selectedModel) || models[0];

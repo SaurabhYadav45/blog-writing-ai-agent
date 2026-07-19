@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlmodel import Session
 from app.core.db import get_session
 from app.models.user import User
 from app.models.payment import PaymentTransaction
 from app.api.deps import get_current_user
+from app.core.email import send_payment_receipt_email
 from app.core.config import settings
 import razorpay
 from pydantic import BaseModel
@@ -49,6 +50,7 @@ def create_order(current_user: User = Depends(get_current_user)):
 @router.post("/verify-payment")
 def verify_payment(
     payment_data: PaymentVerification, 
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
@@ -89,6 +91,15 @@ def verify_payment(
         session.add(current_user)
         session.commit()
         session.refresh(current_user)
+        
+        # Send Receipt Email in background
+        background_tasks.add_task(
+            send_payment_receipt_email,
+            email_to=current_user.email,
+            amount_inr=amount_in_inr,
+            order_id=payment_data.razorpay_order_id,
+            plan_name=current_user.plan_name
+        )
         
         return {
             "status": "success", 

@@ -26,7 +26,7 @@ class BlogBase(SQLModel):
     model_name: Optional[str] = llm_models.FAMILY_GPT
     
     # Store dynamic dictionaries/JSON fields inside database columns
-    metrics: Optional[Dict] = Field(default={}, sa_column=Column(JSON))
+    metrics: Optional[List] = Field(default=[], sa_column=Column(JSON))
     seo_metadata: Optional[Dict] = Field(default={}, sa_column=Column(JSON))
     latency: float = Field(default=0.0)
 

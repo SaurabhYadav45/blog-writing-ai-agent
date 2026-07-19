@@ -1,7 +1,7 @@
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 
-export const getBlogs = async (token: string) => {
-  return fetch(`${BASE_URL}/blogs`, {
+export const getBlogs = async (token: string, offset = 0, limit = 10) => {
+  return fetch(`${BASE_URL}/blogs?offset=${offset}&limit=${limit}`, {
     headers: {
       Authorization: `Bearer ${token}`
     }
@@ -95,7 +95,7 @@ export const updateBlogTitle = async (id: number | string, title: string, token:
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     },
-    body: JSON.stringify({ title })
+    body: JSON.stringify({ topic: title })
   });
 };
 

@@ -7,9 +7,11 @@ import { loadRazorpay } from '../utils/razorpay';
 import { useLocation } from 'react-router-dom';
 import jsPDF from 'jspdf';
 import { UpgradeModal } from '../components/UpgradeModal';
+import { ConfirmModal } from '../components/ConfirmModal';
+import { MODEL_PRICING, MODEL_NAMES } from '../config/models';
 
 export const Settings = () => {
-  const { token, user, refreshUser } = useAuth();
+  const { token, user, refreshUser, logout } = useAuth();
   const location = useLocation();
   
   const [fullName, setFullName] = useState('');
@@ -33,6 +35,7 @@ export const Settings = () => {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
   const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -136,6 +139,11 @@ export const Settings = () => {
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
+        // Clean up URL so we don't get stuck in a loop if the user closes the modal
+        if (window.location.search.includes('upgrade=true')) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+
         if (!orderRes.ok) {
             const err = await orderRes.json();
             throw new Error(err.detail || 'Failed to create order');
@@ -168,14 +176,9 @@ export const Settings = () => {
                 if (verifyRes.ok) {
                     setMessage({ type: 'success', text: 'Payment successful! Plan upgraded to Pro.' });
                     await refreshUser(); // refresh user state
-                    // Refresh payment history locally without reloading page
-                    const histRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/payments/history`, {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
-                    if (histRes.ok) {
-                        const histData = await histRes.json();
-                        setPaymentHistory(histData);
-                    }
+                    
+                    // Clear the ?upgrade=true from URL and reload to prevent any stuck state
+                    window.location.href = '/settings';
                 } else {
                     const err = await verifyRes.json();
                     setMessage({ type: 'error', text: err.detail || 'Payment verification failed.' });
@@ -199,6 +202,32 @@ export const Settings = () => {
         setMessage({ type: 'error', text: err.message });
     } finally {
         setIsUpgrading(false);
+    }
+  };
+
+  const handleDeleteAccount = () => {
+    setDeleteModalOpen(true);
+  };
+
+  const confirmDeleteAccount = async () => {
+    setDeleteModalOpen(false);
+    if (!token) return;
+    
+    setIsLoading(true);
+    try {
+        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/users/me`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+            logout();
+        } else {
+            const err = await res.json();
+            throw new Error(err.detail || 'Failed to delete account');
+        }
+    } catch (err: any) {
+        setMessage({ type: 'error', text: err.message });
+        setIsLoading(false);
     }
   };
 
@@ -333,6 +362,16 @@ export const Settings = () => {
               <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Account Settings</h1>
               <p className="text-slate-500 mt-1">Manage your profile, billing, and external integrations.</p>
             </div>
+            
+            <button
+              type="submit"
+              form="settings-form"
+              disabled={isSaving || isLoading}
+              className="flex items-center gap-2 py-2.5 px-6 rounded-xl text-sm font-bold text-white bg-linear-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all shadow-md shadow-orange-500/20 disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer"
+            >
+              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Save Changes
+            </button>
           </div>
 
           <div className="bg-white p-8 rounded-3xl shadow-sm border border-orange-100">
@@ -341,7 +380,7 @@ export const Settings = () => {
             <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-8">
+          <form id="settings-form" onSubmit={handleSubmit} className="space-y-8">
             
             {message && (
               <div className={`p-4 rounded-xl flex items-center gap-3 ${message.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
@@ -357,14 +396,6 @@ export const Settings = () => {
                   <User className="w-5 h-5 text-orange-500" />
                   Profile Information
                 </h3>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="flex items-center gap-2 py-2.5 px-5 rounded-xl text-sm font-bold text-white bg-linear-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all shadow-md shadow-orange-500/20 disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  Save Changes
-                </button>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -600,6 +631,33 @@ export const Settings = () => {
               </div>
             </section>
             
+            {/* Pricing Estimator */}
+            <section className="space-y-4">
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-orange-500" />
+                Model Pricing Calculator
+              </h3>
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden text-sm">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold text-slate-700">Model Name</th>
+                      <th className="px-4 py-3 font-semibold text-slate-700">Input Cost (per 1M tokens)</th>
+                      <th className="px-4 py-3 font-semibold text-slate-700">Output Cost (per 1M tokens)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-600">
+                    {Object.entries(MODEL_PRICING).map(([model, pricing]) => (
+                      <tr key={model} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-3 font-medium text-slate-900">{model}</td>
+                        <td className="px-4 py-3">${pricing.input.toFixed(2)}</td>
+                        <td className="px-4 py-3">${pricing.output.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
 
             {/* Payment History */}
             <section className="space-y-5">
@@ -655,14 +713,13 @@ export const Settings = () => {
               </div>
             </section>
 
-            
             {/* <div className="w-full h-px bg-slate-100"></div> */}
 
             {/* Danger Zone */}
             <section className="space-y-4">
               <h3 className="text-lg font-bold text-red-600 flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-red-600" />
-                Danger Zone <span className="text-xs font-normal opacity-80 bg-orange-500 text-white px-1 rounded-sm">Coming Soon</span>
+                Danger Zone
               </h3>
               
               <div className="p-5 border border-red-200 rounded-xl bg-red-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -670,9 +727,9 @@ export const Settings = () => {
                   <p className="font-semibold text-red-800">Delete Account</p>
                   <p className="text-sm text-red-600 mt-1">Once you delete your account, there is no going back. Please be certain.</p>
                 </div>
-                <button type="button" disabled className="flex items-center gap-2 px-5 py-2.5 bg-red-600 text-white text-sm font-semibold rounded-xl opacity-70 cursor-not-allowed transition-colors shadow-sm whitespace-nowrap">
+                <button type="button" onClick={handleDeleteAccount} disabled={isLoading} className="flex items-center gap-2 px-5 py-2.5 bg-red-600 text-white text-sm font-semibold rounded-xl hover:bg-red-700 transition-colors shadow-sm whitespace-nowrap cursor-pointer">
                   <Trash2 className="w-4 h-4" />
-                  Delete Account
+                  {isLoading ? 'Deleting...' : 'Delete Account'}
                 </button>
               </div>
             </section>
@@ -686,6 +743,14 @@ export const Settings = () => {
         isOpen={showUpgradeModal} 
         onClose={() => setShowUpgradeModal(false)} 
         featureName="Custom Brand Personas" 
+      />
+      <ConfirmModal 
+        isOpen={deleteModalOpen}
+        title="Delete Account"
+        message="Are you absolutely sure you want to permanently delete your account? All your blogs, settings, and transaction details will be lost forever. This action cannot be undone."
+        confirmText="Permanently Delete"
+        onConfirm={confirmDeleteAccount}
+        onCancel={() => setDeleteModalOpen(false)}
       />
     </div>
   );

@@ -18,6 +18,9 @@ class UserBase(SQLModel):
     email: str = Field(unique=True, index=True)
     full_name: Optional[str] = None
     is_active: bool = True
+    is_verified: bool = Field(default=False)
+    otp_code: Optional[str] = None
+    otp_expires_at: Optional[datetime] = None
     plan_name: str = Field(default="Free")
     credits: int = Field(default=1)
     cloudinary_cloud_name: Optional[str] = None

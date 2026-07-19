@@ -26,7 +26,7 @@ export const Workspace = () => {
   
   // Active workflow variables
   const [isGenerating, setIsGenerating] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<string>(MODEL_NAMES.GPT_CHEAP);
+  const [selectedModel, setSelectedModel] = useState<string>('GPT');
   const [streamStatus, setStreamStatus] = useState<string>('pending');
   const [streamMessage, setStreamMessage] = useState<string>('');
   const [clearSignal, setClearSignal] = useState<number>(0);
@@ -82,7 +82,6 @@ export const Workspace = () => {
     setIsMobileMenuOpen(false); // Close sidebar drawer on mobile
     setSelectedBlogId(id);
     setIsGenerating(false);
-    setStreamStatus('complete');
     setActiveTab('Preview');
     
     // Clear previous blog details if this is a fresh manual load rather than SSE completion hook
@@ -99,7 +98,24 @@ export const Workspace = () => {
     try {
       const response = await getBlogById(id, token || '');
       const data = await response.json();
-      setFinalMarkdown(data.markdown_content || "No content generated yet.");
+      setFinalMarkdown(data.markdown_content || null);
+      
+      const backendStatusMap: Record<string, string> = {
+        "COMPLETED": "complete",
+        "ERROR": "error",
+        "PENDING": "pending",
+        "GENERATING": "generating"
+      };
+      const mappedStatus = backendStatusMap[data.status] || 'complete';
+      setStreamStatus(mappedStatus);
+
+      if (data.status === 'ERROR') {
+        setStreamMessage('Generation failed or was interrupted.');
+      } else if (data.status === 'PENDING') {
+        setStreamMessage('Generation is pending.');
+      } else {
+        setStreamMessage('');
+      }
       if (!isLiveCompletion) {
         setMode(data.mode);
         if (data.plan) setPlan(data.plan);
@@ -201,6 +217,60 @@ export const Workspace = () => {
     }
   };
 
+  const handleResume = async (blogId: number) => {
+    setIsMobileMenuOpen(false);
+    setIsGenerating(true);
+    setStreamStatus('generating');
+    setStreamMessage('Resuming generation...');
+    setActiveTab('Preview');
+
+    try {
+      const eventSource = new EventSource(getStreamUrl(blogId, token || ''));
+      
+      eventSource.onmessage = async (event) => {
+        const data = JSON.parse(event.data);
+        
+        setStreamStatus(data.status);
+        setStreamMessage(data.message);
+        
+        setLogs(prev => [...prev, `[${data.status.toUpperCase()}] ${data.message}`]);
+        
+        if (data.mode) setMode(data.mode);
+        if (data.plan) setPlan(data.plan);
+        if (data.evidence) setEvidence(data.evidence);
+        if (data.metrics) setMetrics(data.metrics);
+        if (data.latency) setLatency(data.latency);
+        if (data.seo_metadata) setSeoMetadata(data.seo_metadata);
+        
+        if (data.status === 'complete' || data.status === 'error') {
+          eventSource.close();
+          setIsGenerating(false);
+          
+          if (data.status === 'complete') {
+            setLogs(prev => [...prev, `Stream complete. Fetching final markdown...`]);
+            loadBlog(blogId, true);
+            setClearSignal(prev => prev + 1);
+          }
+        }
+      };
+
+      eventSource.onerror = () => {
+        setStreamStatus('error');
+        setStreamMessage('Connection lost. Please check the backend.');
+        setLogs(prev => [...prev, `ERROR: SSE Connection lost.`]);
+        eventSource.close();
+        setIsGenerating(false);
+      };
+
+    } catch (error: any) {
+      console.error(error);
+      setIsGenerating(false);
+      setStreamStatus('error');
+      setStreamMessage('Failed to resume blog generation.');
+      setLogs(prev => [...prev, `ERROR: ${error.message}`]);
+    }
+  };
+
   return (
     <div className="flex flex-col md:flex-row h-screen w-full overflow-hidden bg-orange-50 relative workspace-font">
       {/* Mobile Header Bar */}
@@ -232,6 +302,7 @@ export const Workspace = () => {
             onGenerate={handleGenerate} 
             isGenerating={isGenerating}
             clearSignal={clearSignal}
+            onViewFullHistory={() => setActiveTab('History')}
           />
         </div>
       </div>
@@ -257,6 +328,7 @@ export const Workspace = () => {
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           onDeleteBlog={handleDeleteBlog}
+          onResume={handleResume}
         />
       </div>
     </div>

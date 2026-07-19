@@ -37,6 +37,5 @@ builder.add_edge("merge_content", "generate_and_place_images")
 builder.add_edge("generate_and_place_images", "editor")
 builder.add_edge("editor", END)
 
-# In-memory checkpointer to persist state and checkpoints for resume functionalities
-memory = MemorySaver()
-graph = builder.compile(checkpointer=memory)
+# The checkpointer configuration and graph compilation are now handled dynamically
+# in the FastAPI lifespan manager to properly support async usage.
