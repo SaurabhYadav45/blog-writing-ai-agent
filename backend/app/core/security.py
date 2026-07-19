@@ -8,6 +8,7 @@ using the PyJWT library.
 from datetime import datetime, timedelta, timezone
 from typing import Any, Union, Optional
 import jwt
+import bcrypt
 
 from app.core.config import settings
 
