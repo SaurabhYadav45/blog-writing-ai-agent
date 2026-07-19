@@ -233,6 +233,8 @@ def forgot_password(
     """
     user = session.exec(select(User).where(User.email == payload.email)).first()
     if user:
+        import logging
+        logging.info(f"Generating reset link. settings.FRONTEND_URL is: {settings.FRONTEND_URL}")
         token = create_password_reset_token(email=user.email)
         background_tasks.add_task(send_reset_password_email, email_to=user.email, token=token)
     
