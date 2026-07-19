@@ -72,11 +72,18 @@ def verify_payment(
         current_user.plan_name = "Pro"
         current_user.credits += 50
         
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
-        if current_user.plan_expires_at and current_user.plan_expires_at > now:
-            current_user.plan_expires_at = current_user.plan_expires_at + timedelta(days=30)
+        now = datetime.now(timezone.utc)
+        expires_at = current_user.plan_expires_at
+        if expires_at:
+            expires_at_aware = expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=timezone.utc)
+            if expires_at_aware > now:
+                new_expiry = expires_at_aware + timedelta(days=30)
+            else:
+                new_expiry = now + timedelta(days=30)
         else:
-            current_user.plan_expires_at = now + timedelta(days=30)
+            new_expiry = now + timedelta(days=30)
+            
+        current_user.plan_expires_at = new_expiry.replace(tzinfo=None)
             
         payment_tx = PaymentTransaction(
             user_id=current_user.id,
