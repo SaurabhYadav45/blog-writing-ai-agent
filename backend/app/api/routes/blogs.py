@@ -7,7 +7,7 @@ deletion, and contextual AI section regeneration.
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from sqlmodel import Session, select
+from sqlmodel import Session, select, update
 import json
 import time
 import asyncio
@@ -103,9 +103,9 @@ def generate_blog(
         status="PENDING"
     )
     
-    # Deduct credit and save the pending blog
-    current_user.credits -= 1
-    session.add(current_user)
+    # Deduct credit atomically and save the pending blog
+    stmt = update(User).where(User.id == current_user.id).values(credits=User.credits - 1)
+    session.exec(stmt)
     session.add(db_blog)
     session.commit()
     
@@ -146,8 +146,8 @@ async def stream_blog(
         if current_user.credits <= 0:
             print(f"[DEBUG] User {current_user.email} attempted to resume blog but has 0 credits.")
             raise HTTPException(status_code=403, detail="Not enough credits to resume blog generation.")
-        current_user.credits -= 1
-        session.add(current_user)
+        stmt = update(User).where(User.id == current_user.id).values(credits=User.credits - 1)
+        session.exec(stmt)
         session.commit()
         session.refresh(db_blog)
 
@@ -173,7 +173,7 @@ async def stream_blog(
                 inputs = {
                     "topic": gen_db_blog.topic,
                     "mode": "auto",
-                    "model_name": gen_db_blog.model_name or llm_models.FAMILY_GPT,
+                    "model_name": gen_db_blog.model_name or llm_models.DEFAULT_TEXT_PROVIDER,
                     "image_model_name": gen_db_blog.image_model_name or llm_models.IMAGE_MODEL_POLLINATIONS,
                     "depth": gen_db_blog.depth or "Standard Guide",
                     "reference_urls": gen_db_blog.reference_urls or "",
@@ -185,7 +185,6 @@ async def stream_blog(
                     "recency_days": 7,
                     "sections": [],
                     "merged_md": "",
-                    "md_with_placeholders": "",
                     "image_specs": [],
                     "final_blog": "",
                     "seo_metadata": {},
@@ -334,11 +333,9 @@ async def stream_blog(
                 gen_db_blog.status = "ERROR"
                 gen_session.add(gen_db_blog)
                 
-                # Refund credit
-                user_to_refund = gen_session.get(User, gen_db_blog.user_id)
-                if user_to_refund:
-                    user_to_refund.credits += 1
-                    gen_session.add(user_to_refund)
+                # Refund credit atomically
+                stmt = update(User).where(User.id == gen_db_blog.user_id).values(credits=User.credits + 1)
+                gen_session.exec(stmt)
                 
                 gen_session.commit()
                 
@@ -459,7 +456,7 @@ class RegenerateRequest(BaseModel):
     """
     selected_text: str
     prompt: str
-    model_name: str = llm_models.FAMILY_GPT
+    model_name: str = llm_models.DEFAULT_TEXT_PROVIDER
     full_text: str = ""
 
 @router.post("/{blog_id}/regenerate-selection")

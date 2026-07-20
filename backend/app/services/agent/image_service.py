@@ -7,9 +7,7 @@ from app.core.llm_models import (
     IMAGE_MODEL_OPENAI,
     IMAGE_MODEL_GEMINI,
     IMAGE_MODEL_CLOUDFLARE,
-    IMAGE_MODEL_HUGGINGFACE,
-    IMAGE_MODEL_POLLINATIONS,
-    REAL_MODEL_MAP
+    IMAGE_MODEL_POLLINATIONS
 )
 
 logger = logging.getLogger(__name__)
@@ -33,8 +31,6 @@ def generate_image_bytes(prompt: str, provider: str = IMAGE_MODEL_POLLINATIONS, 
         return _gemini_generate(prompt, width, height)
     elif provider == IMAGE_MODEL_CLOUDFLARE:
         return _cloudflare_generate(prompt, width, height)
-    elif provider == IMAGE_MODEL_HUGGINGFACE:
-        return _huggingface_generate(prompt, width, height)
     elif provider == IMAGE_MODEL_POLLINATIONS:
         return _pollinations_generate(prompt, width, height)
     else:
@@ -55,9 +51,8 @@ def _openai_generate(prompt: str, width: int, height: int) -> bytes:
         openai_size = "1024x1024"
         
     client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
-    real_model = REAL_MODEL_MAP.get(IMAGE_MODEL_OPENAI, "gpt-image-1")
     response = client.images.generate(
-        model=real_model,
+        model=IMAGE_MODEL_OPENAI,
         prompt=prompt,
         size=openai_size,
         quality="standard",
@@ -76,7 +71,7 @@ def _gemini_generate(prompt: str, width: int, height: int) -> bytes:
     if not api_key:
         raise ValueError("GOOGLE_API_KEY is not set.")
         
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{IMAGE_MODEL_GEMINI}:generateContent?key={api_key}"
     headers = {"Content-Type": "application/json"}
     
     # Map size aspect ratio to Gemini image request parameters if supported, 
@@ -123,27 +118,7 @@ def _cloudflare_generate(prompt: str, width: int, height: int) -> bytes:
     
     return response.content
 
-def _huggingface_generate(prompt: str, width: int, height: int) -> bytes:
-    """Generate through Hugging Face Inference Providers (not the legacy URL)."""
-    hf_token = settings.HF_TOKEN or settings.HUGGINGFACE_API_KEY
-    if not hf_token:
-        raise ValueError("HF_TOKEN is not set. Create an hf_ token with Inference Providers permission.")
 
-    from io import BytesIO
-    from huggingface_hub import InferenceClient
-
-    client = InferenceClient(provider="auto", api_key=hf_token)
-    image = client.text_to_image(
-        prompt=prompt,
-        model=IMAGE_MODEL_HUGGINGFACE,
-        width=width,
-        height=height,
-    )
-    if isinstance(image, bytes):
-        return image
-    buffer = BytesIO()
-    image.save(buffer, format="PNG")
-    return buffer.getvalue()
 def _pollinations_generate(prompt: str, width: int, height: int) -> bytes:
     """Uses Pollinations AI (free, keyless)."""
     import urllib.parse

@@ -23,7 +23,7 @@ class BlogBase(SQLModel):
     depth: Optional[str] = "Standard Guide"
 
     reference_urls: Optional[str] = None
-    model_name: Optional[str] = llm_models.FAMILY_GPT
+    model_name: Optional[str] = llm_models.DEFAULT_TEXT_PROVIDER
     image_model_name: Optional[str] = llm_models.IMAGE_MODEL_POLLINATIONS
     
     # Store dynamic dictionaries/JSON fields inside database columns
@@ -38,7 +38,7 @@ class Blog(BlogBase, table=True):
     (such as draft content, outlines, evidence collected, and logs).
     """
     id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: Optional[int] = Field(default=None, foreign_key="user.id")
+    user_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)
     mode: Optional[str] = Field(default=None)
     status: str = Field(default="PENDING")  # Status states: PENDING, COMPLETED, ERROR
     markdown_content: Optional[str] = Field(default=None)

@@ -151,7 +151,6 @@ class BlogState(TypedDict):
 
     # Content assembly & images
     merged_md: str
-    md_with_placeholders: str
     image_specs: List[dict]
 
     # Final completed output
@@ -176,14 +175,6 @@ class SEOMetadata(BaseModel):
     meta_description: str
     slug: str
     focus_keywords: List[str]
-
-
-class EditorOutput(BaseModel):
-    """
-    Structured output schema for the Editor Node.
-    """
-    seo_metadata: SEOMetadata
-    youtube_embed_html: Optional[str] = Field(default=None, description="If highly relevant, an HTML iframe tag for a YouTube video. Provide ONLY the iframe tag.")
 
 
 def fetch_youtube_video(topic: str) -> str:

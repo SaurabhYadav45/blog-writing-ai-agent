@@ -40,8 +40,6 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     OPENROUTER_API_KEY: str = ""
     COHERE_API_KEY: str = ""
-    HF_TOKEN: str = ""  # Hugging Face hf_ token with Inference Providers permission
-    HUGGINGFACE_API_KEY: str = ""  # Legacy fallback; prefer HF_TOKEN
     CLOUDFLARE_ACCOUNT_ID: str = ""
     CLOUDFLARE_API_KEY: str = ""
     

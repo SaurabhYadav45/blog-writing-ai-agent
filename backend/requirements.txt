@@ -27,4 +27,7 @@ psycopg-pool
 psycopg[binary]
 slowapi
 gunicorn
-huggingface_hub
+
+markdown-it-py
+cryptography
+httplib2

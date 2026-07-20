@@ -24,8 +24,19 @@ from app.core.config import settings
 # Import limiter from core
 from app.core.limiter import limiter
 
+import re
+
 router = APIRouter()
 
+def validate_password(password: str) -> None:
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
+    if not re.search(r"[A-Z]", password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one uppercase letter")
+    if not re.search(r"[a-z]", password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one lowercase letter")
+    if not re.search(r"\d", password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one number")
 @router.post("/signup")
 @limiter.limit("5/minute")
 def signup(*, request: Request, background_tasks: BackgroundTasks, session: Session = Depends(get_session), user_in: UserCreate) -> Any:
@@ -37,6 +48,7 @@ def signup(*, request: Request, background_tasks: BackgroundTasks, session: Sess
     3. Generates a 6-digit OTP and saves it to the user.
     4. Queues the OTP email.
     """
+    validate_password(user_in.password)
     user = session.exec(select(User).where(User.email == user_in.email)).first()
     if user and user.is_verified:
         raise HTTPException(
@@ -263,6 +275,7 @@ def reset_password(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
         
+    validate_password(payload.new_password)
     user.hashed_password = get_password_hash(payload.new_password)
     session.add(user)
     session.commit()

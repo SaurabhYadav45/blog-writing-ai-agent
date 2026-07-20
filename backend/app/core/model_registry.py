@@ -63,7 +63,7 @@ LEGACY_PROVIDER_IDS = {
     "gemini": "gemini", "deepseek": "deepseek", "openrouter": "openrouter",
     "cohere": "cohere",
     # Existing saved blog records from the previous implementation.
-    "gpt-5.6-sol": "openai", "gpt-5.6-terra": "openai", "gpt-5.6-luna": "openai",
+    "gpt-5.6-terra": "openai", "gpt-5.6-luna": "openai",
     "claude-sonnet-5": "anthropic", "claude-haiku-4-5": "anthropic",
     "gemini-3.1-pro": "gemini", "gemini-3.1-pro-preview": "gemini", "gemini-3.5-flash": "gemini",
     "deepseek-v4": "deepseek", "deepseek-v4-pro": "deepseek", "deepseek-v4-flash": "deepseek",

@@ -20,7 +20,7 @@ from app.core.model_registry import ModelSpec, get_model_spec
 from app.services.model_selector import create_chat_model
 from app.services.cloudinary_service import upload_image_bytes
 from app.services.agent.prompt import ROUTER_SYSTEM_PROMPT, RESEARCH_SYSTEM_PROMPT, PLANNER_SYSTEM_PROMPT, WORKER_SYSTEM_PROMPT, DECIDE_IMAGES_SYSTEM_PROMPT, EDITOR_SYSTEM_PROMPT
-from app.services.agent.state import BlogState, Task, Plan, EvidenceItem, EvidencePack, RouterDecision, ImageSpec, GlobalImagePlan, SEOMetadata, EditorOutput, fetch_youtube_video
+from app.services.agent.state import BlogState, Task, Plan, EvidenceItem, EvidencePack, RouterDecision, ImageSpec, GlobalImagePlan, SEOMetadata, fetch_youtube_video
 
 os.environ["TAVILY_API_KEY"] = settings.TAVILY_API_KEY
 
@@ -36,7 +36,7 @@ def parse_structured_response(response):
 
 def get_model_for_task(state: dict, expensive: bool = True) -> ModelSpec:
     """Resolve the provider and workload tier from the canonical registry."""
-    return get_model_spec(state.get("model_name", "openai"), "complex" if expensive else "cheap")
+    return get_model_spec(state.get("model_name", llm_models.DEFAULT_TEXT_PROVIDER), "complex" if expensive else "cheap")
 
 
 def get_llm(state: dict, expensive: bool = True, agent_role: Optional[str] = None):
@@ -132,7 +132,7 @@ def router_node(state: BlogState):
     """
     topic = state["topic"]
     as_of = state.get("as_of", date.today().isoformat())
-    model_name = state.get("model_name", llm_models.FAMILY_GPT)
+    model_name = state.get("model_name", llm_models.DEFAULT_TEXT_PROVIDER)
     llm = get_llm(state, expensive=False, agent_role="router")
     decider_llm = structured_output(llm, state, RouterDecision, include_raw=True)
     
@@ -279,7 +279,7 @@ def orchestrator_node(state: BlogState):
     Incorporates web search evidence to ground claims if in hybrid/open_book modes.
     """
     llm = get_llm(state, agent_role="planner")
-    model_name = state.get("model_name", llm_models.FAMILY_GPT)
+    model_name = state.get("model_name", llm_models.DEFAULT_TEXT_PROVIDER)
     planner = structured_output(llm, state, Plan, include_raw=True)
     evidence = state.get("evidence", [])
     mode = state.get("mode", "closed_book")
@@ -404,7 +404,7 @@ def worker_node(payload: dict) -> dict:
         ]
     )
     
-    model_name = payload.get("model_name", llm_models.FAMILY_GPT)
+    model_name = payload.get("model_name", llm_models.DEFAULT_TEXT_PROVIDER)
     metrics_log = extract_usage(section_md, f"Worker ({task.title})", get_model_for_task(payload, True))
 
     content = section_md.content
@@ -468,7 +468,7 @@ def decide_images(state: BlogState) -> dict:
     plan = state["plan"]
     assert plan is not None
     llm = get_llm(state, expensive=False, agent_role="image_planner")
-    model_name = state.get("model_name", llm_models.FAMILY_GPT)
+    model_name = state.get("model_name", llm_models.DEFAULT_TEXT_PROVIDER)
 
     plan_name = state.get("plan_name", "Free")
     image_prompt_instruction = "Propose ONLY 1 image prompt for the thumbnail."
@@ -585,7 +585,7 @@ def editor_node(state: BlogState):
     Also queries and embeds a relevant YouTube tutorial at the footer of the markdown.
     """
     llm = get_llm(state, expensive=False, agent_role="seo_optimizer")
-    model_name = state.get("model_name", llm_models.FAMILY_GPT)
+    model_name = state.get("model_name", llm_models.DEFAULT_TEXT_PROVIDER)
     
     editor = structured_output(llm, state, SEOMetadata, include_raw=True)
     
