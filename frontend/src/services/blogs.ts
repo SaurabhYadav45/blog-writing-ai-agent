@@ -24,6 +24,7 @@ export const generateBlog = async (
     depth?: string;
     reference_urls?: string;
     model_name?: string;
+    image_model_name?: string;
   }, 
   token: string
 ) => {

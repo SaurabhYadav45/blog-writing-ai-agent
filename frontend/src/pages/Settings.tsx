@@ -8,7 +8,7 @@ import { useLocation } from 'react-router-dom';
 import jsPDF from 'jspdf';
 import { UpgradeModal } from '../components/UpgradeModal';
 import { ConfirmModal } from '../components/ConfirmModal';
-import { MODEL_PRICING } from '../config/models';
+
 
 export const Settings = () => {
   const { token, user, refreshUser, logout } = useAuth();
@@ -631,33 +631,7 @@ export const Settings = () => {
               </div>
             </section>
             
-            {/* Pricing Estimator */}
-            <section className="space-y-4">
-              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-orange-500" />
-                Model Pricing Calculator
-              </h3>
-              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden text-sm">
-                <table className="w-full text-left">
-                  <thead className="bg-slate-50 border-b border-slate-200">
-                    <tr>
-                      <th className="px-4 py-3 font-semibold text-slate-700">Model Name</th>
-                      <th className="px-4 py-3 font-semibold text-slate-700">Input Cost (per 1M tokens)</th>
-                      <th className="px-4 py-3 font-semibold text-slate-700">Output Cost (per 1M tokens)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-600">
-                    {Object.entries(MODEL_PRICING).map(([model, pricing]) => (
-                      <tr key={model} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-4 py-3 font-medium text-slate-900">{model}</td>
-                        <td className="px-4 py-3">${pricing.input.toFixed(2)}</td>
-                        <td className="px-4 py-3">${pricing.output.toFixed(2)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
+
 
             {/* Payment History */}
             <section className="space-y-5">

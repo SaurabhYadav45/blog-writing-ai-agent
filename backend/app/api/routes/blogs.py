@@ -20,9 +20,33 @@ from app.models.user import User
 from app.api.deps import get_current_user, get_current_user_from_query
 # Graph is injected via request.app.state
 from app.core import llm_models
+from app.core.model_registry import get_model_spec, is_allowed_for_plan, normalize_provider_id, public_catalog
+from app.services.model_selector import create_chat_model
 from app.core.limiter import limiter
 
 router = APIRouter()
+
+@router.get("/models")
+def available_models(current_user: User = Depends(get_current_user)):
+    """Return registry-backed providers that the authenticated user may select."""
+    return {"default_provider": "openai", "providers": public_catalog(current_user.plan_name)}
+def response_text(content) -> str:
+    """Normalize provider-specific message content into plain text."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if isinstance(part, str):
+                parts.append(part)
+            elif isinstance(part, dict):
+                parts.append(str(part.get("text") or part.get("content") or ""))
+            else:
+                parts.append(str(getattr(part, "text", "") or getattr(part, "content", "") or ""))
+        return "".join(parts)
+    if isinstance(content, dict):
+        return str(content.get("text") or content.get("content") or "")
+    return str(getattr(content, "text", "") or getattr(content, "content", "") or content or "")
 
 class BlogGenerateRequest(BaseModel):
     """
@@ -32,6 +56,7 @@ class BlogGenerateRequest(BaseModel):
     tone: str
     audience: str
     model_name: str
+    image_model_name: str = "pollinations-flux"
     depth: str = "Standard Guide"
     reference_urls: str = ""
 
@@ -55,11 +80,14 @@ def generate_blog(
         print(f"[DEBUG] User {current_user.email} attempted to generate a blog but has 0 credits.")
         raise HTTPException(status_code=403, detail="Not enough credits to generate a blog.")
         
-    premium_models = [llm_models.MODEL_GPT_EXPENSIVE, llm_models.MODEL_CLAUDE_EXPENSIVE, llm_models.MODEL_GEMINI_EXPENSIVE]
-    if payload.model_name in premium_models and current_user.plan_name != "Pro":
-        print(f"[DEBUG] User {current_user.email} attempted to use a premium model ({payload.model_name}) without a Pro plan.")
-        raise HTTPException(status_code=403, detail="Premium models are a Pro feature. Please upgrade to use this.")
-        
+    try:
+        provider_id = normalize_provider_id(payload.model_name)
+        complex_model = get_model_spec(provider_id, "complex")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not is_allowed_for_plan(complex_model, current_user.plan_name):
+        raise HTTPException(status_code=403, detail="This AI provider is a Pro feature. Please upgrade to use it.")
+    payload.model_name = provider_id        
     print(f"[DEBUG] Blog generation request validated for user {current_user.email}. Creating DB record...")
         
     db_blog = Blog(
@@ -67,6 +95,7 @@ def generate_blog(
         tone=payload.tone,
         audience=payload.audience,
         model_name=payload.model_name,
+        image_model_name=payload.image_model_name,
         depth=payload.depth,
         user_id=current_user.id,
         reference_urls=payload.reference_urls,
@@ -145,6 +174,7 @@ async def stream_blog(
                     "topic": gen_db_blog.topic,
                     "mode": "auto",
                     "model_name": gen_db_blog.model_name or llm_models.FAMILY_GPT,
+                    "image_model_name": gen_db_blog.image_model_name or llm_models.IMAGE_MODEL_POLLINATIONS,
                     "depth": gen_db_blog.depth or "Standard Guide",
                     "reference_urls": gen_db_blog.reference_urls or "",
                     "need_research": False,
@@ -454,26 +484,16 @@ def regenerate_selection(
     if not db_blog or db_blog.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Blog not found")
         
-    from langchain_openai import ChatOpenAI
-    from langchain_anthropic import ChatAnthropic
-    from langchain_google_genai import ChatGoogleGenerativeAI
     from langchain_core.messages import SystemMessage, HumanMessage
-    from app.core.config import settings
-    
-    # Initialize the correct LLM provider based on requested model
-    m = payload.model_name.lower()
-    
-    # Get the real underlying API model string
-    real_model = llm_models.REAL_MODEL_MAP.get(payload.model_name, "gpt-4o-mini")
-    
-    # If the user is requesting an expensive model, we already validated they are Pro above.
-    if "claude" in m:
-        llm = ChatAnthropic(model=real_model, api_key=settings.ANTHROPIC_API_KEY)
-    elif "gemini" in m:
-        llm = ChatGoogleGenerativeAI(model=real_model, api_key=settings.GOOGLE_API_KEY)
-    else:
-        llm = ChatOpenAI(model=real_model, api_key=settings.OPENAI_API_KEY)
-        
+
+    try:
+        provider_id = normalize_provider_id(payload.model_name)
+        spec = get_model_spec(provider_id, "complex")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not is_allowed_for_plan(spec, current_user.plan_name):
+        raise HTTPException(status_code=403, detail="This AI provider is a Pro feature. Please upgrade to use it.")
+    llm = create_chat_model(spec)
     system_prompt = (
         "You are an expert technical editor. Rewrite the provided selected text based on the user's instructions. "
         "Return ONLY the new markdown text. Do not include any conversational filler."
@@ -491,7 +511,7 @@ def regenerate_selection(
         HumanMessage(content=human_content)
     ])
     
-    new_text = response.content
+    new_text = response_text(response.content)
     if isinstance(new_text, str):
         new_text = new_text.strip()
         if new_text.startswith("```markdown\n"):
@@ -567,13 +587,10 @@ def promote_on_linkedin(
         raise HTTPException(status_code=400, detail="Blog must be published to a CMS first.")
         
     # Generate the short post
-    from langchain_openai import ChatOpenAI
     from langchain_core.messages import SystemMessage, HumanMessage
-    from app.core.config import settings
-    from app.core import llm_models
-    
-    llm = ChatOpenAI(model=llm_models.MODEL_GPT_CHEAP, api_key=settings.OPENAI_API_KEY)
-    
+
+    spec = get_model_spec("openai", "cheap")
+    llm = create_chat_model(spec)
     system_prompt = (
         "You are an expert social media manager. Create an engaging, professional LinkedIn post "
         "to promote a new blog article. Keep it under 100 words. Include 2-3 relevant hashtags. "
@@ -592,7 +609,7 @@ def promote_on_linkedin(
         HumanMessage(content=human_content)
     ])
     
-    post_text = response.content.strip()
+    post_text = response_text(response.content).strip()
     
     from app.services.cms_service import share_to_linkedin, CMSPublishError
     

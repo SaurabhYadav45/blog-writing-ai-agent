@@ -52,3 +52,27 @@ body {
 @utility glass-sidebar {
   @apply bg-white/70 backdrop-blur-2xl border-r border-orange-100/50 shadow-sm;
 }
+
+/* Force Mermaid diagram edges and arrowheads to be clearly visible under Tailwind CSS resets */
+.mermaid svg .edgePath path,
+.mermaid svg .edgePaths path,
+.mermaid svg .edge-thickness-normal path,
+.mermaid svg .edge-thickness-thick path,
+.mermaid-container svg path.path,
+.mermaid svg path.path {
+  stroke: #cbd5e1 !important; /* slate-300, light/bright for dark backgrounds! */
+  stroke-width: 2px !important;
+  fill: none !important;
+}
+
+.mermaid svg .arrowheadPath,
+.mermaid svg marker path {
+  fill: #cbd5e1 !important;
+  stroke: #cbd5e1 !important;
+  stroke-width: 1px !important;
+}
+
+.mermaid svg .label {
+  font-weight: 500 !important;
+  color: #1e293b !important; /* slate-800 */
+}

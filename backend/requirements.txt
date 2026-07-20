@@ -7,6 +7,9 @@ langchain-anthropic
 langchain-google-genai
 langchain-core
 langchain-tavily
+langchain-cohere
+langchain-groq
+langchain-openrouter
 openai
 cloudinary
 python-dotenv
@@ -23,4 +26,5 @@ langgraph-checkpoint-postgres
 psycopg-pool
 psycopg[binary]
 slowapi
-gunicorn  
+gunicorn
+huggingface_hub

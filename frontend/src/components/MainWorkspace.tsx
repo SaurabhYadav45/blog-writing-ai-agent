@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { UserProfileDropdown } from './UserProfileDropdown';
 import { updateBlogContent, regenerateBlogSelection, getBlogs, deleteBlog, updateBlogTitle } from '../services/blogs';
 import { ModelDropdown } from './ModelDropdown';
+import { ImageModelDropdown } from './workspace-tabs/ImageModelDropdown';
 import { LogsTab } from './workspace-tabs/LogsTab';
 import { PlanTab } from './workspace-tabs/PlanTab';
 import { EvidenceTab } from './workspace-tabs/EvidenceTab';
@@ -18,6 +19,8 @@ interface MainWorkspaceProps {
   isGenerating: boolean;
   selectedModel: string;
   onModelSelect: (model: string) => void;
+  selectedImageModel: string;
+  onImageModelSelect: (model: string) => void;
   streamStatus: string;
   streamMessage: string;
   logs: string[];
@@ -44,6 +47,8 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
   isGenerating,
   selectedModel,
   onModelSelect,
+  selectedImageModel,
+  onImageModelSelect,
   streamStatus,
   streamMessage, logs, plan, evidence, metrics, latency, finalMarkdown, seoMetadata,
   onSelectBlog,
@@ -403,6 +408,9 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
             
             {/* Model Switcher UI */}
             <ModelDropdown selectedModel={selectedModel} onModelSelect={onModelSelect} />
+            <ImageModelDropdown selectedModel={selectedImageModel} onModelSelect={onImageModelSelect} />
+            
+            <div className="h-4 w-px bg-slate-200"></div>
 
             {/* User Profile Dropdown */}
             <UserProfileDropdown />

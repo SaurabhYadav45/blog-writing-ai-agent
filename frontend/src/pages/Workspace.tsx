@@ -25,6 +25,7 @@ export const Workspace = () => {
   // Active workflow variables
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>('GPT');
+  const [selectedImageModel, setSelectedImageModel] = useState<string>('pollinations-flux');
   const [streamStatus, setStreamStatus] = useState<string>('pending');
   const [streamMessage, setStreamMessage] = useState<string>('');
   const [clearSignal, setClearSignal] = useState<number>(0);
@@ -157,7 +158,8 @@ export const Workspace = () => {
         audience,
         depth,
         reference_urls: referenceUrls,
-        model_name: selectedModel
+        model_name: selectedModel,
+        image_model_name: selectedImageModel
       }, token || '');
       
       if (!response.ok) throw new Error("Failed to start generation");
@@ -321,6 +323,8 @@ export const Workspace = () => {
           seoMetadata={seoMetadata}
           selectedModel={selectedModel}
           onModelSelect={setSelectedModel}
+          selectedImageModel={selectedImageModel}
+          onImageModelSelect={setSelectedImageModel}
           onSelectBlog={loadBlog}
           selectedBlogId={selectedBlogId}
           activeTab={activeTab}

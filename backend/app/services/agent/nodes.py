@@ -1,5 +1,7 @@
 from typing import TypedDict, Annotated, List, Literal, Optional
 import operator
+import json
+import threading
 from langgraph.types import Send
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
@@ -14,67 +16,114 @@ import os
 
 from app.core.config import settings
 from app.core import llm_models
+from app.core.model_registry import ModelSpec, get_model_spec
+from app.services.model_selector import create_chat_model
 from app.services.cloudinary_service import upload_image_bytes
 from app.services.agent.prompt import ROUTER_SYSTEM_PROMPT, RESEARCH_SYSTEM_PROMPT, PLANNER_SYSTEM_PROMPT, WORKER_SYSTEM_PROMPT, DECIDE_IMAGES_SYSTEM_PROMPT, EDITOR_SYSTEM_PROMPT
 from app.services.agent.state import BlogState, Task, Plan, EvidenceItem, EvidencePack, RouterDecision, ImageSpec, GlobalImagePlan, SEOMetadata, EditorOutput, fetch_youtube_video
 
 os.environ["TAVILY_API_KEY"] = settings.TAVILY_API_KEY
 
-def get_llm(state: dict, expensive: bool = True):
+def parse_structured_response(response):
     """
-    Selects and returns the appropriate LLM chat instance based on requested
-    model name in state and whether an expensive (large reasoning) or cheap
-    (fast parsing) model is desired for the active graph node.
+    Safely extract parsed pydantic object and raw message from langchain's
+    with_structured_output response. Handles cases where the model returns 
+    the Pydantic object directly instead of a dict wrapper.
     """
-    model_name = state.get("model_name", llm_models.FAMILY_GPT).lower()
-    
-    if "claude" in model_name:
-        if expensive:
-            real_model = llm_models.REAL_MODEL_MAP.get(llm_models.MODEL_CLAUDE_EXPENSIVE, "claude-3-5-sonnet-20240620")
-            return ChatAnthropic(model=real_model, api_key=settings.ANTHROPIC_API_KEY)
-        else:
-            real_model = llm_models.REAL_MODEL_MAP.get(llm_models.MODEL_CLAUDE_CHEAP, "claude-3-haiku-20240307")
-            return ChatAnthropic(model=real_model, api_key=settings.ANTHROPIC_API_KEY)
-    elif "gemini" in model_name:
-        if expensive:
-            real_model = llm_models.REAL_MODEL_MAP.get(llm_models.MODEL_GEMINI_EXPENSIVE, "gemini-1.5-pro")
-            return ChatGoogleGenerativeAI(model=real_model, api_key=settings.GOOGLE_API_KEY)
-        else:
-            real_model = llm_models.REAL_MODEL_MAP.get(llm_models.MODEL_GEMINI_CHEAP, "gemini-1.5-flash")
-            return ChatGoogleGenerativeAI(model=real_model, api_key=settings.GOOGLE_API_KEY)
-    else:
-        if expensive:
-            real_model = llm_models.REAL_MODEL_MAP.get(llm_models.MODEL_GPT_BALANCED, "gpt-4o")
-            return ChatOpenAI(model=real_model, api_key=settings.OPENAI_API_KEY)
-        else:
-            real_model = llm_models.REAL_MODEL_MAP.get(llm_models.MODEL_GPT_CHEAP, "gpt-4o-mini")
-            return ChatOpenAI(model=real_model, api_key=settings.OPENAI_API_KEY)
+    if isinstance(response, dict):
+        return response.get("parsed"), response.get("raw")
+    return response, None
 
-def extract_usage(raw, node_name: str, model_name: str):
-    """
-    Extracts token usage metadata from raw chat response objects
-    for tracking dashboard API metrics and latency.
-    """
+def get_model_for_task(state: dict, expensive: bool = True) -> ModelSpec:
+    """Resolve the provider and workload tier from the canonical registry."""
+    return get_model_spec(state.get("model_name", "openai"), "complex" if expensive else "cheap")
+
+
+def get_llm(state: dict, expensive: bool = True, agent_role: Optional[str] = None):
+    """Create the correct provider client for the selected registry model."""
+    return create_chat_model(get_model_for_task(state, expensive))
+
+
+class JsonObjectStructuredOutput:
+    """DeepSeek JSON-mode adapter with local Pydantic validation."""
+    def __init__(self, llm, schema, include_raw: bool):
+        self.llm = llm.bind(response_format={"type": "json_object"})
+        self.schema = schema
+        self.include_raw = include_raw
+
+    @staticmethod
+    def _text(content) -> str:
+        if isinstance(content, list):
+            return "".join(part.get("text", "") for part in content if isinstance(part, dict))
+        return str(content)
+
+    def _parse(self, content: str):
+        payload = json.loads(content)
+        # A common JSON-mode failure is echoing the supplied schema instead of
+        # returning a data instance. Treat it as invalid and issue one retry.
+        if isinstance(payload, dict) and "properties" in payload and "required" in payload:
+            raise ValueError("model returned a JSON Schema instead of JSON data")
+        return self.schema.model_validate(payload)
+
+    def invoke(self, messages):
+        schema_text = json.dumps(self.schema.model_json_schema(), separators=(",", ":"))
+        fields = ", ".join(self.schema.model_fields.keys())
+        instruction = SystemMessage(content=(
+            "Return only a populated JSON DATA object for the user's request. "
+            "Never return, repeat, explain, or describe the schema itself; do not output keys such as "
+            "'properties', 'required', 'type', or 'description'. Required data fields are: " + fields + ".\n"
+            "Validate your DATA object against this schema internally:\n" + schema_text
+        ))
+        raw = self.llm.invoke([instruction, *messages])
+        content = self._text(raw.content)
+        try:
+            parsed = self._parse(content)
+        except Exception:
+            correction = HumanMessage(content=(
+                "Your last answer was not a populated data object. Return only the requested JSON data now. "
+                f"Use these fields: {fields}. Do not output the schema, type definitions, or descriptions."
+            ))
+            raw = self.llm.invoke([instruction, *messages, correction])
+            content = self._text(raw.content)
+            try:
+                parsed = self._parse(content)
+            except Exception as exc:
+                raise ValueError(f"{self.schema.__name__} JSON validation failed after retry: {content!r}") from exc
+        return {"parsed": parsed, "raw": raw} if self.include_raw else parsed
+
+def structured_output(llm, state: dict, schema, *, include_raw: bool = False):
+    """Select a structured-output mode supported by the active provider."""
+    if get_model_for_task(state, expensive=False).provider_id == "deepseek":
+        return JsonObjectStructuredOutput(llm, schema, include_raw)
+    return llm.with_structured_output(schema, include_raw=include_raw)
+
+def extract_usage(raw, node_name: str, spec: ModelSpec):
+    """Normalize provider usage and attach the price snapshot used for this call."""
     usage = getattr(raw, "usage_metadata", None)
     if not usage and hasattr(raw, "response_metadata"):
         token_usage = raw.response_metadata.get("token_usage", {})
         usage = {
             "input_tokens": token_usage.get("prompt_tokens", 0),
             "output_tokens": token_usage.get("completion_tokens", 0),
-            "total_tokens": token_usage.get("total_tokens", 0)
+            "total_tokens": token_usage.get("total_tokens", 0),
         }
-    if not usage:
-        usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
-        
+    usage = usage or {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+    input_tokens, output_tokens = usage.get("input_tokens", 0), usage.get("output_tokens", 0)
+    metadata = getattr(raw, "response_metadata", {}) or {}
+    token_usage = metadata.get("token_usage", {}) or {}
+    cached_input_tokens = (usage.get("cache_read_input_tokens") or usage.get("cached_input_tokens") or token_usage.get("prompt_cache_hit_tokens") or 0)
+    uncached_input_tokens = token_usage.get("prompt_cache_miss_tokens") or max(input_tokens - cached_input_tokens, 0)
+    if spec.input_per_million is None or spec.output_per_million is None:
+        cost_usd = None
+    else:
+        cached_rate = spec.cached_input_per_million if spec.cached_input_per_million is not None else spec.input_per_million
+        cost_usd = (uncached_input_tokens * spec.input_per_million + cached_input_tokens * cached_rate + output_tokens * spec.output_per_million) / 1_000_000
     return {
-        "node": node_name,
-        "model_name": model_name,
-        "input_tokens": usage.get("input_tokens", 0),
-        "output_tokens": usage.get("output_tokens", 0),
-        "total_tokens": usage.get("total_tokens", 0)
+        "node": node_name, "provider": spec.provider_id, "requested_model": spec.model_id,
+        "model_name": metadata.get("model_name") or metadata.get("model") or spec.model_id,
+        "tier": spec.tier, "input_tokens": input_tokens, "cached_input_tokens": cached_input_tokens, "output_tokens": output_tokens,
+        "total_tokens": usage.get("total_tokens", 0), "cost_usd": cost_usd,
     }
-
-
 
 def router_node(state: BlogState):
     """
@@ -84,8 +133,8 @@ def router_node(state: BlogState):
     topic = state["topic"]
     as_of = state.get("as_of", date.today().isoformat())
     model_name = state.get("model_name", llm_models.FAMILY_GPT)
-    llm = get_llm(state, expensive=False)
-    decider_llm = llm.with_structured_output(RouterDecision, include_raw=True)
+    llm = get_llm(state, expensive=False, agent_role="router")
+    decider_llm = structured_output(llm, state, RouterDecision, include_raw=True)
     
     response = decider_llm.invoke(
         [
@@ -99,8 +148,8 @@ def router_node(state: BlogState):
         ]
     )
     
-    decision = response["parsed"]
-    metrics_log = extract_usage(response["raw"], "Router Node", model_name)
+    decision, raw_response = parse_structured_response(response)
+    metrics_log = extract_usage(raw_response, "Router Node", get_model_for_task(state, False))
 
     # Set recency threshold based on routing decision mode
     if decision.mode == "open_book":
@@ -164,8 +213,8 @@ def research_node(state: BlogState) -> dict:
     Deduplicates results through a structured LLM call.
     """
     queries = (state.get("queries", []) or [])
-    max_results = 6
-    llm = get_llm(state, expensive=False)
+    max_results = 3
+    llm = get_llm(state, expensive=False, agent_role="research_analyzer")
 
     raw_results: List[dict] = []
     
@@ -203,11 +252,11 @@ def research_node(state: BlogState) -> dict:
         return {"evidence": []}
 
     # Use LLM to extract structure and filter high-quality evidence
-    extractor = llm.with_structured_output(EvidencePack)
+    extractor = structured_output(llm, state, EvidencePack)
     pack = extractor.invoke(
         [
             SystemMessage(content=RESEARCH_SYSTEM_PROMPT),
-            HumanMessage(content=f"Raw results:\n{raw_results}"),
+            HumanMessage(content=f"Raw results:\n{raw_results[:12]}"),
         ]
     )
 
@@ -229,9 +278,9 @@ def orchestrator_node(state: BlogState):
     Generates a structured outline (plan) for the blog based on depth configuration.
     Incorporates web search evidence to ground claims if in hybrid/open_book modes.
     """
-    llm = get_llm(state)
+    llm = get_llm(state, agent_role="planner")
     model_name = state.get("model_name", llm_models.FAMILY_GPT)
-    planner = llm.with_structured_output(Plan, include_raw=True)
+    planner = structured_output(llm, state, Plan, include_raw=True)
     evidence = state.get("evidence", [])
     mode = state.get("mode", "closed_book")
 
@@ -248,15 +297,17 @@ def orchestrator_node(state: BlogState):
                     f"As-of: {state['as_of']} (recency_days={state['recency_days']})\n"
                     f"{'Force blog_kind=news_roundup' if forced_kind else ''}\n\n"
                     f"Evidence (ONLY use for fresh claims; may be empty):\n"
-                    f"{[e.model_dump() for e in evidence][:16]}\n\n"
+                    f"{[e.model_dump() for e in evidence][:8]}\n\n"
                     f"Instruction: Ensure the section count matches the requested Target Depth."
                 )
             ),
         ]
     )
     
-    plan = response["parsed"]
-    metrics_log = extract_usage(response["raw"], "Orchestrator Node", model_name)
+    plan, raw_response = parse_structured_response(response)
+    if plan is None:
+        raise ValueError("Planner did not return a valid Plan. Check the provider response and structured-output configuration.")
+    metrics_log = extract_usage(raw_response, "Orchestrator Node", get_model_for_task(state, True))
 
     if forced_kind:
         plan.blog_kind = "news_roundup"
@@ -312,7 +363,7 @@ def worker_node(payload: dict) -> dict:
     mode = payload.get("mode", "closed_book")
     as_of = payload.get("as_of")
     recency_days = payload.get("recency_days")
-    llm = get_llm(payload)
+    llm = get_llm(payload, agent_role="blog_writer")
 
     bullets_text = "\n- " + "\n- ".join(task.bullets)
 
@@ -354,7 +405,7 @@ def worker_node(payload: dict) -> dict:
     )
     
     model_name = payload.get("model_name", llm_models.FAMILY_GPT)
-    metrics_log = extract_usage(section_md, f"Worker ({task.title})", model_name)
+    metrics_log = extract_usage(section_md, f"Worker ({task.title})", get_model_for_task(payload, True))
 
     content = section_md.content
     if isinstance(content, list):
@@ -416,7 +467,7 @@ def decide_images(state: BlogState) -> dict:
     """
     plan = state["plan"]
     assert plan is not None
-    llm = get_llm(state, expensive=False)
+    llm = get_llm(state, expensive=False, agent_role="image_planner")
     model_name = state.get("model_name", llm_models.FAMILY_GPT)
 
     plan_name = state.get("plan_name", "Free")
@@ -424,7 +475,7 @@ def decide_images(state: BlogState) -> dict:
     if plan_name == "Pro":
         image_prompt_instruction = "Propose 2 to 3 image prompts total (1 thumbnail + 1 or 2 inline images) and assign them to the most relevant task_id."
 
-    image_insertion_planner = llm.with_structured_output(GlobalImagePlan, include_raw=True)
+    image_insertion_planner = structured_output(llm, state, GlobalImagePlan, include_raw=True)
     response = image_insertion_planner.invoke(
         [
             SystemMessage(content=DECIDE_IMAGES_SYSTEM_PROMPT),
@@ -439,8 +490,8 @@ def decide_images(state: BlogState) -> dict:
         ]
     )
     
-    image_plan = response["parsed"]
-    metrics_log = extract_usage(response["raw"], "Image Planner Node", model_name)
+    image_plan, raw_response = parse_structured_response(response)
+    metrics_log = extract_usage(raw_response, "Image Planner Node", get_model_for_task(state, False))
 
     return {
         "image_specs": [img.model_dump() for img in image_plan.images],
@@ -448,46 +499,12 @@ def decide_images(state: BlogState) -> dict:
     }
 
 
-def openai_generate_image_bytes(prompt: str, size: str = "1536x1024", quality: str = "standard") -> bytes:
-    """
-    Generates an image using OpenAI DALL-E-3 API and downloads the raw bytes.
-    """
-    api_key = settings.OPENAI_API_KEY
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY is not set.")
-
-    client = OpenAI(api_key=api_key)
-
-    resp = client.images.generate(
-        model=llm_models.MODEL_GPT_IMAGE,
-        prompt=prompt,
-        n=1,
-        size=size,
-        quality=quality
-    )
-
-    if not resp.data:
-        raise RuntimeError("No image content returned from OpenAI.")
-
-    if resp.data[0].b64_json:
-        import base64
-        return base64.b64decode(resp.data[0].b64_json)
-
-    if not resp.data[0].url:
-        raise RuntimeError("Neither b64_json nor url was returned.")
-
-    image_url = resp.data[0].url
-    
-    # Download the image bytes
-    r = requests.get(image_url)
-    r.raise_for_status()
-    
-    return r.content
+from app.services.agent.image_service import generate_image_bytes
 
 
 def generate_and_place_images(state: BlogState):
     """
-    Triggers Dall-E-3 image generation based on prompts, uploads the output to
+    Triggers gpt-image-1 image generation based on prompts, uploads the output to
     Cloudinary, and replaces placeholder tokens in the blog markdown body with 
     the secure HTTPS image URLs.
     """
@@ -497,18 +514,21 @@ def generate_and_place_images(state: BlogState):
     if not image_specs:
         return {"final_blog": md}
 
+    image_model = state.get("image_model_name") or llm_models.IMAGE_MODEL_POLLINATIONS
+
     image_count = 0
     for spec in image_specs:
         placeholder = spec["placeholder"]
         try:
-            img_bytes = openai_generate_image_bytes(
+            # The factory handles sizing for different providers internally
+            img_bytes = generate_image_bytes(
                 prompt=spec["prompt"], 
-                size=spec.get("size", "1536x1024"),
-                quality=spec.get("quality", "medium")
+                provider=image_model,
+                size=spec.get("size", "1536x1024")
             )
             image_count += 1
         except Exception as e:
-            error_msg = f"OPENAI DALL-E ERROR: {e}"
+            error_msg = f"IMAGE GENERATION ERROR ({image_model}): {e}"
             print(error_msg)
             prompt_block = (
                 f"\n> **[IMAGE GENERATION FAILED]** {spec.get('caption','')}\n>\n"
@@ -550,8 +570,10 @@ def generate_and_place_images(state: BlogState):
         
     metrics_log = {
         "node": "Generate Images",
-        "model_name": llm_models.MODEL_GPT_IMAGE,
-        "images_generated": image_count
+        "provider": image_model,
+        "model_name": image_model,
+        "images_generated": image_count,
+        "cost_usd": None
     }
     
     return {"final_blog": md, "metrics": [metrics_log]}
@@ -562,10 +584,10 @@ def editor_node(state: BlogState):
     Synthesizes SEO meta descriptions, slugs, and focus keywords.
     Also queries and embeds a relevant YouTube tutorial at the footer of the markdown.
     """
-    llm = get_llm(state, expensive=False)
+    llm = get_llm(state, expensive=False, agent_role="seo_optimizer")
     model_name = state.get("model_name", llm_models.FAMILY_GPT)
     
-    editor = llm.with_structured_output(EditorOutput, include_raw=True)
+    editor = structured_output(llm, state, SEOMetadata, include_raw=True)
     
     plan = state.get("plan")
     plan_dict = plan.model_dump() if hasattr(plan, 'model_dump') else dict(plan) if plan else {}
@@ -580,8 +602,8 @@ def editor_node(state: BlogState):
         ]
     )
     
-    parsed = response["parsed"]
-    metrics_log = extract_usage(response["raw"], "Editor Node", model_name)
+    parsed, raw_response = parse_structured_response(response)
+    metrics_log = extract_usage(raw_response, "Editor Node", get_model_for_task(state, False))
     
     final_blog = state.get("final_blog", "")
     
@@ -600,7 +622,7 @@ def editor_node(state: BlogState):
         
     return {
         "final_blog": final_blog,
-        "seo_metadata": parsed.seo_metadata.model_dump(),
+        "seo_metadata": parsed.model_dump(),
         "metrics": [metrics_log]
     }
 

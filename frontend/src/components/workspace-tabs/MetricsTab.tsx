@@ -1,5 +1,4 @@
 import React from 'react';
-import { MODEL_PRICING } from '../../config/models';
 
 export interface MetricsTabProps {
   metrics: any[];
@@ -7,32 +6,7 @@ export interface MetricsTabProps {
   isGenerating: boolean;
 }
 
-const calculateCost = (model: string, input: number, output: number) => {
-  // Try exact match first
-  let pricing = MODEL_PRICING[model as keyof typeof MODEL_PRICING];
-  
-  if (!pricing) {
-    // Fallback logic for case-insensitive or partial matches
-    const m = model.toLowerCase();
-    const key = Object.keys(MODEL_PRICING).find(k => k.toLowerCase() === m);
-    if (key) {
-      pricing = MODEL_PRICING[key as keyof typeof MODEL_PRICING];
-    } else if (m.includes('image')) {
-      pricing = MODEL_PRICING['gpt-image-1'];
-    } else if (m === 'gpt') {
-      pricing = MODEL_PRICING['gpt-5.6-sol'];
-    } else if (m === 'claude') {
-      pricing = MODEL_PRICING['Claude-Sonnet-5'];
-    } else if (m === 'gemini') {
-      pricing = MODEL_PRICING['Gemini-3.1-Pro'];
-    }
-  }
-
-  if (!pricing) return 0;
-  if (model.includes('image')) return pricing.input; // flat rate for images
-  
-  return (input / 1000000) * pricing.input + (output / 1000000) * pricing.output;
-};
+const metricCost = (metric: any): number | null => typeof metric.cost_usd === "number" ? metric.cost_usd : null;
 
 export const MetricsTab: React.FC<MetricsTabProps> = ({ metrics, latency, isGenerating }) => {
   const safeMetrics = Array.isArray(metrics) ? metrics : [];
@@ -40,14 +14,8 @@ export const MetricsTab: React.FC<MetricsTabProps> = ({ metrics, latency, isGene
   const totalOutput = safeMetrics.reduce((acc, m) => acc + (m.output_tokens || 0), 0);
   const totalImages = safeMetrics.reduce((acc, m) => acc + (m.images_generated || 0), 0);
   
-  let totalCost = 0;
-  safeMetrics.forEach(m => {
-    if (m.images_generated) {
-      totalCost += m.images_generated * 0.04;
-    } else {
-      totalCost += calculateCost(m.model_name || '', m.input_tokens || 0, m.output_tokens || 0);
-    }
-  });
+  const knownCosts = safeMetrics.map(metricCost).filter((cost): cost is number => cost !== null);
+  const totalCost = knownCosts.reduce((sum, cost) => sum + cost, 0);
 
   return (
     <div className="h-full bg-slate-50/50 p-6 overflow-y-auto">
@@ -73,10 +41,7 @@ export const MetricsTab: React.FC<MetricsTabProps> = ({ metrics, latency, isGene
       <h3 className="text-lg font-bold text-slate-800 mb-6">Execution Timeline</h3>
       <div className="relative border-l-2 border-slate-200 ml-3 space-y-6">
         {safeMetrics.map((m, idx) => {
-          const nodeCost = m.images_generated 
-            ? m.images_generated * 0.04 
-            : calculateCost(m.model_name || '', m.input_tokens || 0, m.output_tokens || 0);
-            
+          const nodeCost = metricCost(m);
           return (
             <div key={idx} className="relative pl-6 animate-in slide-in-from-left-4 fade-in duration-500">
               <div className="absolute -left-[9px] top-1.5 w-4 h-4 rounded-full bg-white border-2 border-orange-400"></div>
@@ -103,7 +68,7 @@ export const MetricsTab: React.FC<MetricsTabProps> = ({ metrics, latency, isGene
                 )}
                 <div className="mt-3 text-right">
                   <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-md">
-                    +${nodeCost.toFixed(4)}
+                    {nodeCost === null ? 'Cost unavailable' : `+$${nodeCost.toFixed(4)}`}
                   </span>
                 </div>
               </div>

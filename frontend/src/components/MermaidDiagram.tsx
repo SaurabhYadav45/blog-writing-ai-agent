@@ -59,5 +59,5 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart }) => {
     );
   }
 
-  return <div ref={containerRef} className="my-6 flex justify-center w-full" />;
+  return <div ref={containerRef} className="mermaid mermaid-container my-6 flex justify-center w-full" />;
 };

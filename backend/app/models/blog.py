@@ -24,6 +24,7 @@ class BlogBase(SQLModel):
 
     reference_urls: Optional[str] = None
     model_name: Optional[str] = llm_models.FAMILY_GPT
+    image_model_name: Optional[str] = llm_models.IMAGE_MODEL_POLLINATIONS
     
     # Store dynamic dictionaries/JSON fields inside database columns
     metrics: Optional[List] = Field(default=[], sa_column=Column(JSON))

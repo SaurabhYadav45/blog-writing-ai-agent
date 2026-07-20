@@ -14,10 +14,11 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getDashboard } from '../services/users';
 import { Link, useNavigate } from 'react-router-dom';
-import { Sparkles, Zap, Layers, FileText, Bot, Clock, Cpu, ArrowRight, AlertTriangle, Type, Crown } from 'lucide-react';
+import { Sparkles, Zap, Layers, FileText, Bot, Clock, Cpu, ArrowRight, AlertTriangle, Type, Crown, ChevronDown } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Navbar } from '../components/Navbar';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { MODEL_PRICING } from '../config/models';
 
 const COLORS = ['#f97316', '#3b82f6', '#10b981', '#8b5cf6', '#ef4444'];
 
@@ -25,6 +26,7 @@ export const Dashboard = () => {
   const { user, token } = useAuth();
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isPricingOpen, setIsPricingOpen] = useState(false);
   const navigate = useNavigate();
 
   // Fetch analytical stats from backend on mount
@@ -375,6 +377,50 @@ export const Dashboard = () => {
               </div>
               <p className="font-medium text-gray-500">No blogs generated yet.</p>
               <p className="text-sm mt-1">Click "Generate New Blog" to get started.</p>
+            </div>
+          )}
+        </motion.div>
+
+        {/* Pricing Accordion */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 1.0 }}
+          className="bg-white rounded-[32px] shadow-sm border border-orange-100 w-full overflow-hidden"
+        >
+          <button
+            onClick={() => setIsPricingOpen(!isPricingOpen)}
+            className="w-full flex items-center justify-between p-6 bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer border-b border-orange-100"
+          >
+            <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-orange-500" />
+              Model Pricing & Limits
+            </h3>
+            <ChevronDown size={24} className={`text-slate-400 transition-transform ${isPricingOpen ? 'rotate-180' : ''}`} />
+          </button>
+          
+          {isPricingOpen && (
+            <div className="p-8">
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden text-sm">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold text-slate-700">Model Name</th>
+                      <th className="px-4 py-3 font-semibold text-slate-700">Input Cost (per 1M tokens)</th>
+                      <th className="px-4 py-3 font-semibold text-slate-700">Output Cost (per 1M tokens)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-600">
+                    {Object.entries(MODEL_PRICING).map(([model, pricing]) => (
+                      <tr key={model} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-3 font-medium text-slate-900">{model}</td>
+                        <td className="px-4 py-3">${pricing.input.toFixed(2)}</td>
+                        <td className="px-4 py-3">${pricing.output.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </motion.div>

@@ -108,6 +108,10 @@ Grounding policy:
 Code & Diagrams:
 - If requires_code == true, include at least one minimal, correct code snippet.
 - Use ` ```mermaid ` blocks to generate diagrams and make the blog visually engaging. For technical blogs, generate architecture flowcharts or state diagrams. For general or news roundup blogs, generate Timelines, Pie Charts, or Mindmaps to break up the text.
+- **CRITICAL MERMAID RULES**: To prevent rendering errors:
+  1. ALWAYS wrap node labels containing special characters (such as colons `:`, parentheses `()`, quotes `"`, commas `,`, ampersands `&`, braces, brackets) in double quotes. E.g., `A["User Input: 'Alex loves hiking'"]` or `C["Context: Hiking (High)"]`.
+  2. Avoid nested double quotes inside labels. Use single quotes or escape them.
+  3. Never use HTML tags inside node labels.
 """
 
 

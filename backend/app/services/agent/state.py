@@ -1,6 +1,6 @@
-from typing import TypedDict, Annotated, List, Literal, Optional
+from typing import TypedDict, Annotated, List, Literal, Optional, Union
 import operator
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 import os
 from app.core.config import settings
 
@@ -29,9 +29,16 @@ class Task(BaseModel):
         description="target word count for this section is (120-450)"
     )
     tags: List[str] = Field(default_factory=list)
-    requires_research: bool = False
-    requires_citations: bool = False
-    requires_code: bool = False
+    requires_research: Union[bool, str] = False
+    requires_citations: Union[bool, str] = False
+    requires_code: Union[bool, str] = False
+
+    @field_validator("requires_research", "requires_citations", "requires_code", mode="before")
+    @classmethod
+    def coerce_booleans(cls, v):
+        if isinstance(v, str):
+            return v.strip().lower() in ("true", "1", "yes")
+        return bool(v)
 
 
 class Plan(BaseModel):
@@ -68,7 +75,7 @@ class EvidenceItem(BaseModel):
     Schema representing a snippet of real-world research evidence.
     """
     title: str
-    url: str
+    url: Optional[str] = None
     published_at: Optional[str] = None
     snippet: Optional[str] = None
     source: Optional[str] = None
@@ -78,21 +85,28 @@ class EvidencePack(BaseModel):
     """
     Schema representing a collection of researched evidence.
     """
-    evidence: List[EvidenceItem] = Field(default_factory=list)
+    evidence: List[EvidenceItem] = Field(..., description="List of evidence items.")
 
 
 class RouterDecision(BaseModel):
     """
     Structured output for the Router agent.
     """
-    need_research: bool
+    need_research: Union[bool, str]
     mode: Literal["closed_book", "hybrid", "open_book"]
     queries: List[str] = Field(default_factory=list)
+
+    @field_validator("need_research", mode="before")
+    @classmethod
+    def coerce_need_research(cls, v):
+        if isinstance(v, str):
+            return v.strip().lower() in ("true", "1", "yes")
+        return bool(v)
 
 
 class ImageSpec(BaseModel):
     """
-    Structured output specifying how DALL-E-3 should render a blog image.
+    Structured output specifying how GPT Image 1 should render a blog image.
     """
     task_id: int = Field(..., description="The ID of the task/section where this image should be inserted.")
     filename: str = Field(..., description="Save under /images, e.g. abc_flow.png")
@@ -108,7 +122,7 @@ class GlobalImagePlan(BaseModel):
     """
     Collection of planned images for the blog post.
     """
-    images: List[ImageSpec] = Field(default_factory=list)
+    images: List[ImageSpec] = Field(..., description="List of planned images.")
 
 
 class BlogState(TypedDict):
@@ -117,6 +131,7 @@ class BlogState(TypedDict):
     """
     topic: str
     model_name: str
+    image_model_name: str
     depth: str
     reference_urls: Optional[str]
     
@@ -178,6 +193,9 @@ def fetch_youtube_video(topic: str) -> str:
     """
     try:
         from googleapiclient.discovery import build
+        import httplib2
+        # Use httplib2 with a 10 second timeout to prevent infinite socket blocking
+        http = httplib2.Http(timeout=10)
     except ImportError:
         return ""
         
@@ -186,7 +204,7 @@ def fetch_youtube_video(topic: str) -> str:
         print("YOUTUBE_API_KEY not found in .env, skipping YouTube integration.")
         return ""
     
-    youtube = build("youtube", "v3", developerKey=api_key)
+    youtube = build("youtube", "v3", developerKey=api_key, http=http)
     query = f"{topic} tutorial explanation"
     
     try:

@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str  # Anthropic API Key (used for Claude models)
     GOOGLE_API_KEY: str     # Google Gemini API Key (used for Gemini models)
     TAVILY_API_KEY: str     # Tavily Search API Key (used by AI Agents for web research)
+    DEEPSEEK_API_KEY: str = ""
+    GROQ_API_KEY: str = ""
+    OPENROUTER_API_KEY: str = ""
+    COHERE_API_KEY: str = ""
+    HF_TOKEN: str = ""  # Hugging Face hf_ token with Inference Providers permission
+    HUGGINGFACE_API_KEY: str = ""  # Legacy fallback; prefer HF_TOKEN
+    CLOUDFLARE_ACCOUNT_ID: str = ""
+    CLOUDFLARE_API_KEY: str = ""
     
     # Cloudinary Cloud Storage configuration for storing generated blog images
     CLOUDINARY_CLOUD_NAME: str = ""
