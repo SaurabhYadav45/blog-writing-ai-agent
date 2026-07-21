@@ -44,6 +44,9 @@ export const BillingSettings: React.FC<BillingSettingsProps> = ({
               <li className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" /> 1 Generation Credit</li>
               <li className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" /> Basic LLM Models</li>
               <li className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" /> Standard Generation Speed</li>
+              <li className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" /> Editor and Preview Tab</li>
+              <li className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" /> SEO Optimization</li>
+              <li className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" /> Live Tracking of Blog Generation</li>
             </ul>
             {user?.plan_name !== 'Pro' && (
               <div className="mt-auto pt-4 border-t border-slate-100">
