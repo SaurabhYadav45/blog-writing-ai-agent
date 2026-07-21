@@ -8,13 +8,14 @@ import { FeaturesSection } from '../components/home/FeaturesSection';
 import { HowItWorksSection } from '../components/home/HowItWorksSection';
 import { PricingSection } from '../components/home/PricingSection';
 import { FaqSection } from '../components/home/FaqSection';
-import { api } from '../utils/api';
+
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 
 export const Home = () => {
   useEffect(() => {
     // Ping the backend health endpoint in the background to wake up 
     // free-tier instances (e.g., Render) before the user tries to login/signup.
-    api.get('/health').catch(() => {
+    fetch(`${BASE_URL}/health`).catch(() => {
       // Silently ignore any errors as this is just a wake-up ping
     });
   }, []);
