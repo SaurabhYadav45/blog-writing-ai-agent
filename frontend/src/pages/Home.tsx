@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { MessageSquarePlus } from 'lucide-react';
 import { Navbar } from '../components/Navbar';
@@ -7,8 +8,17 @@ import { FeaturesSection } from '../components/home/FeaturesSection';
 import { HowItWorksSection } from '../components/home/HowItWorksSection';
 import { PricingSection } from '../components/home/PricingSection';
 import { FaqSection } from '../components/home/FaqSection';
+import { api } from '../utils/api';
 
 export const Home = () => {
+  useEffect(() => {
+    // Ping the backend health endpoint in the background to wake up 
+    // free-tier instances (e.g., Render) before the user tries to login/signup.
+    api.get('/health').catch(() => {
+      // Silently ignore any errors as this is just a wake-up ping
+    });
+  }, []);
+
   return (
     <div className="flex flex-col items-center bg-[#FFFAF3] relative">
       {/* Sticky Header */}
