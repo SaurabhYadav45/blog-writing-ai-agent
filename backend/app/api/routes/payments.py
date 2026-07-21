@@ -4,7 +4,7 @@ from app.core.db import get_session
 from app.models.user import User
 from app.models.payment import PaymentTransaction
 from app.api.deps import get_current_user
-from app.core.email import send_payment_receipt_email
+from app.services.email_service import send_payment_receipt_email
 from app.core.config import settings
 import razorpay
 from pydantic import BaseModel
@@ -24,14 +24,14 @@ class PaymentVerification(BaseModel):
 @router.post("/create-order")
 def create_order(current_user: User = Depends(get_current_user)):
     """
-    Creates a new Razorpay order for purchasing the Pro plan (50 credits).
-    The amount is in paise (49900 = 499 INR).
+    Creates a new Razorpay order for purchasing the Pro plan (20 credits).
+    The amount is in cents (19900 = 199 INR).
     """
     if not settings.RAZORPAY_KEY_ID or not settings.RAZORPAY_KEY_SECRET:
         raise HTTPException(status_code=500, detail="Razorpay credentials not configured.")
         
     try:
-        amount = 49900 
+        amount = 19900 
         currency = "INR"
         
         data = {
@@ -56,7 +56,7 @@ def verify_payment(
 ):
     """
     Verifies the Razorpay payment signature using the secret key.
-    If valid, upgrades the user's plan and adds 50 credits.
+    If valid, upgrades the user's plan and grants exactly 20 credits.
     """
     try:
         params_dict = {
@@ -70,7 +70,7 @@ def verify_payment(
         
         # Payment is authentic, upgrade the user
         current_user.plan_name = "Pro"
-        current_user.credits += 50
+        current_user.credits = 20
         
         now = datetime.now(timezone.utc)
         expires_at = current_user.plan_expires_at
@@ -84,12 +84,12 @@ def verify_payment(
             new_expiry = now + timedelta(days=30)
             
         current_user.plan_expires_at = new_expiry.replace(tzinfo=None)
-            
+        # Create payment transaction record
         payment_tx = PaymentTransaction(
             user_id=current_user.id,
             razorpay_order_id=payment_data.razorpay_order_id,
             razorpay_payment_id=payment_data.razorpay_payment_id,
-            amount=49900,
+            amount=19900,
             currency="INR",
             status="success"
         )
@@ -103,7 +103,7 @@ def verify_payment(
         background_tasks.add_task(
             send_payment_receipt_email,
             email_to=current_user.email,
-            amount_inr=499,
+            amount_inr=199.0,
             order_id=payment_data.razorpay_order_id,
             plan_name=current_user.plan_name
         )

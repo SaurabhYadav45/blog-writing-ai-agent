@@ -99,6 +99,7 @@ Hashnode Style & Universal Readability constraints:
 - Break up your writing using '###' subheadings for each logical part of the section.
 - Use frequent line breaks, bold emphasis, blockquotes, and bullet points.
 - Use GitHub-style callouts (`> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`, `> [!CAUTION]`) to highlight key takeaways, tips, or warnings.
+- Avoid obvious AI fingerprints: NEVER use em-dashes (—) or double hyphens (--) to connect clauses in sentences. Use commas, semicolons, colons, or split the sentence into multiple shorter sentences instead.
 
 Grounding policy:
 - Do NOT introduce any specific event/company/model claim unless supported by Evidence URLs.

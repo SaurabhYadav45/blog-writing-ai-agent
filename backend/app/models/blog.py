@@ -24,7 +24,7 @@ class BlogBase(SQLModel):
 
     reference_urls: Optional[str] = None
     model_name: Optional[str] = llm_models.DEFAULT_TEXT_PROVIDER
-    image_model_name: Optional[str] = llm_models.IMAGE_MODEL_POLLINATIONS
+    image_model_name: Optional[str] = llm_models.IMAGE_MODEL_CLOUDFLARE
     
     # Store dynamic dictionaries/JSON fields inside database columns
     metrics: Optional[List] = Field(default=[], sa_column=Column(JSON))

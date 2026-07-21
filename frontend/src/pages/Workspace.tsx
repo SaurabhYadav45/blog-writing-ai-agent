@@ -25,7 +25,7 @@ export const Workspace = () => {
   // Active workflow variables
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>('GPT');
-  const [selectedImageModel, setSelectedImageModel] = useState<string>('pollinations-flux');
+  const [selectedImageModel, setSelectedImageModel] = useState<string>('@cf/stabilityai/stable-diffusion-xl-base-1.0');
   const [streamStatus, setStreamStatus] = useState<string>('pending');
   const [streamMessage, setStreamMessage] = useState<string>('');
   const [clearSignal, setClearSignal] = useState<number>(0);
@@ -303,6 +303,8 @@ export const Workspace = () => {
             isGenerating={isGenerating}
             clearSignal={clearSignal}
             onViewFullHistory={() => setActiveTab('History')}
+            streamStatus={streamStatus}
+            onResume={() => selectedBlogId && handleResume(selectedBlogId)}
           />
         </div>
       </div>

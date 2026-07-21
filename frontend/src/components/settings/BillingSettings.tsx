@@ -1,5 +1,5 @@
 import React from 'react';
-import { CreditCard, Crown, Receipt, Download, Loader2 } from 'lucide-react';
+import { CreditCard, Crown, Receipt, Download, Loader2, Check } from 'lucide-react';
 
 interface BillingSettingsProps {
   user: any;
@@ -25,32 +25,79 @@ export const BillingSettings: React.FC<BillingSettingsProps> = ({
           Subscription & Billing
         </h3>
         
-        <div className="p-5 border border-slate-200 rounded-xl bg-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <p className="font-semibold text-slate-900">Current Plan: {user?.plan_name || 'Free'}</p>
-            <p className="text-sm text-slate-500 mt-1">You have {user?.credits} credits remaining.</p>
-            {user?.plan_name === 'Pro' && user?.plan_expires_at && (
-              <p className="text-xs text-orange-600 font-medium mt-1">
-                Plan expires on {new Date(user.plan_expires_at).toLocaleDateString()}
-              </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Free Plan Card */}
+          <div className={`p-6 border rounded-2xl flex flex-col relative bg-white ${user?.plan_name !== 'Pro' ? 'border-orange-400 ring-1 ring-orange-400' : 'border-slate-200'}`}>
+            {user?.plan_name !== 'Pro' && (
+              <span className="absolute -top-3 right-6 bg-orange-100 text-orange-700 text-xs font-bold px-3 py-1 rounded-full border border-orange-200">
+                Current Plan
+              </span>
+            )}
+            <div className="mb-4">
+              <h4 className="text-xl font-bold text-slate-900">Free Starter</h4>
+              <p className="text-sm text-slate-500 mt-1">Perfect to try out BlogFusion.</p>
+            </div>
+            <div className="mb-6">
+              <span className="text-3xl font-extrabold text-slate-900">₹0</span>
+            </div>
+            <ul className="space-y-3 mb-8 flex-1 text-sm text-slate-600">
+              <li className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" /> 1 Generation Credit</li>
+              <li className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" /> Basic LLM Models</li>
+              <li className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" /> Standard Generation Speed</li>
+            </ul>
+            {user?.plan_name !== 'Pro' && (
+              <div className="mt-auto pt-4 border-t border-slate-100">
+                <p className="text-sm text-slate-600 font-medium">Remaining Credits: <span className="text-orange-600 font-bold">{user?.credits} / 1</span></p>
+              </div>
             )}
           </div>
-          {user?.plan_name === 'Pro' ? (
-            <div className="flex items-center gap-2 px-5 py-2.5 bg-orange-100 text-orange-700 text-sm font-bold rounded-xl cursor-default border border-orange-200">
-              <Crown className="w-4 h-4 fill-orange-700" />
-              Pro Member
+
+          {/* Pro Plan Card */}
+          <div className={`p-6 border rounded-2xl flex flex-col relative bg-gradient-to-b from-orange-50 to-white ${user?.plan_name === 'Pro' ? 'border-orange-500 ring-2 ring-orange-500 shadow-lg shadow-orange-500/10' : 'border-orange-200'}`}>
+            {user?.plan_name === 'Pro' && (
+              <span className="absolute -top-3 right-6 bg-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm">
+                Current Plan
+              </span>
+            )}
+            <div className="mb-4">
+              <h4 className="text-xl font-bold text-orange-700 flex items-center gap-2">
+                <Crown className="w-5 h-5 fill-orange-700" />
+                Pro Professional
+              </h4>
+              <p className="text-sm text-slate-500 mt-1">For serious content creators.</p>
             </div>
-          ) : (
-            <button 
-              type="button" 
-              onClick={handleUpgrade}
-              disabled={isUpgrading}
-              className="flex items-center gap-2 px-5 py-2.5 bg-linear-to-r from-orange-400 to-orange-500 text-white text-sm font-bold rounded-xl hover:from-orange-500 hover:to-orange-600 transition-all shadow-md shadow-orange-500/20 disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer"
-            >
-              {isUpgrading ? <Loader2 className="w-4 h-4 fill-white animate-spin" /> : <Crown className="w-4 h-4 fill-white" />}
-              Upgrade Plan
-            </button>
-          )}
+            <div className="mb-6">
+              <span className="text-3xl font-extrabold text-slate-900">₹199</span>
+              <span className="text-slate-500 text-sm font-medium"> / mo</span>
+            </div>
+            <ul className="space-y-3 mb-8 flex-1 text-sm text-slate-600">
+              <li className="flex items-center gap-2 font-semibold text-slate-900"><Check className="w-4 h-4 text-orange-500" /> 20 Generation Credits</li>
+              <li className="flex items-center gap-2"><Check className="w-4 h-4 text-orange-500" /> Premium LLM Models</li>
+              <li className="flex items-center gap-2"><Check className="w-4 h-4 text-orange-500" /> High-Resolution Image Models</li>
+              <li className="flex items-center gap-2"><Check className="w-4 h-4 text-orange-500" /> Premium Support</li>
+            </ul>
+            
+            {user?.plan_name === 'Pro' ? (
+              <div className="mt-auto pt-4 border-t border-orange-100 flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-600 font-medium">Remaining Credits: <span className="text-orange-600 font-bold">{user?.credits} / 20</span></p>
+                  {user?.plan_expires_at && (
+                    <p className="text-xs text-slate-500 mt-1">Expires on {new Date(user.plan_expires_at).toLocaleDateString()}</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <button 
+                type="button" 
+                onClick={handleUpgrade}
+                disabled={isUpgrading}
+                className="mt-auto flex items-center justify-center gap-2 w-full py-3 bg-gradient-to-r from-orange-400 to-orange-500 text-white text-sm font-bold rounded-xl hover:from-orange-500 hover:to-orange-600 transition-all shadow-md shadow-orange-500/20 disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {isUpgrading ? <Loader2 className="w-5 h-5 fill-white animate-spin" /> : <Crown className="w-5 h-5 fill-white" />}
+                Upgrade to Pro
+              </button>
+            )}
+          </div>
         </div>
       </section>
 
@@ -85,7 +132,7 @@ export const BillingSettings: React.FC<BillingSettingsProps> = ({
                     <tr key={tx.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4">{new Date(tx.created_at).toLocaleDateString()}</td>
                       <td className="px-6 py-4 font-mono text-xs">{tx.razorpay_payment_id}</td>
-                      <td className="px-6 py-4 font-medium text-slate-900">INR {tx.amount / 100}</td>
+                      <td className="px-6 py-4 font-medium text-slate-900">{(tx.currency || 'USD').toUpperCase()} {tx.amount / 100}</td>
                       <td className="px-6 py-4">
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
                           {tx.status}

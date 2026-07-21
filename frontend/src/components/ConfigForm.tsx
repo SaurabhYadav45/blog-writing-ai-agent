@@ -12,9 +12,11 @@ interface ConfigFormProps {
   onGenerate: (topic: string, tone: string, audience: string, depth: string, referenceUrls: string) => void;
   disabled: boolean;       // Lock inputs during active generation runs
   clearSignal: number;    // Numeric trigger to reset inputs (e.g. on new generation start)
+  isError?: boolean;
+  onResume?: () => void;
 }
 
-export function ConfigForm({ onGenerate, disabled, clearSignal }: ConfigFormProps) {
+export function ConfigForm({ onGenerate, disabled, clearSignal, isError, onResume }: ConfigFormProps) {
   // Input states with sensible development defaults
   const [topic, setTopic] = useState("");
   const [tone, setTone] = useState("Story-driven (Engaging)");
@@ -31,6 +33,10 @@ export function ConfigForm({ onGenerate, disabled, clearSignal }: ConfigFormProp
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isError && onResume) {
+      onResume();
+      return;
+    }
     if (!topic.trim()) return;
     onGenerate(topic, tone, audience, depth, referenceUrls);
   };
@@ -123,10 +129,10 @@ export function ConfigForm({ onGenerate, disabled, clearSignal }: ConfigFormProp
         {/* Action Button */}
         <button
           type="submit"
-          disabled={disabled || !topic.trim()}
+          disabled={disabled || (!isError && !topic.trim())}
           className="cursor-pointer w-full bg-gradient-to-r from-orange-500 to-orange-400 hover:from-orange-600 hover:to-orange-500 text-white shadow-lg shadow-orange-500/30 font-medium py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
         >
-          {disabled ? "Generating..." : "Generate Post"}
+          {disabled ? (isError ? "Resuming..." : "Generating...") : (isError ? "Resume Blog" : "Generate Blog")}
           <Send className="w-3.5 h-3.5" />
         </button>
       </form>

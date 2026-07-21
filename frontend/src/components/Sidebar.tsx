@@ -20,9 +20,11 @@ interface SidebarProps {
   isGenerating: boolean;
   clearSignal: number;
   onViewFullHistory: () => void;
+  streamStatus?: string;
+  onResume?: () => void;
 }
 
-export function Sidebar({ onSelectBlog, onGenerate, isGenerating, clearSignal, onViewFullHistory }: SidebarProps) {
+export function Sidebar({ onSelectBlog, onGenerate, isGenerating, clearSignal, onViewFullHistory, streamStatus, onResume }: SidebarProps) {
   const [blogs, setBlogs] = useState<Blog[]>([]);
   const [loading, setLoading] = useState(true);
   const { token } = useAuth();
@@ -100,16 +102,7 @@ export function Sidebar({ onSelectBlog, onGenerate, isGenerating, clearSignal, o
   return (
     <div className="w-full md:w-80 glass-sidebar flex flex-col h-full md:h-screen overflow-y-auto custom-scrollbar bg-white/70">
       <div className="p-6 pb-2">
-        {/* <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-xl overflow-hidden shadow-lg shadow-orange-500/30 border border-orange-200">
-            <img src="/icon.png" alt="BlogFusion Icon" className="w-full h-full object-cover" />
-          </div>
-          <div>
-            <h1 className="text-xl font-extrabold text-slate-800 tracking-tight">
-              BlogFusion
-            </h1>
-          </div>
-        </div> */}
+
         <Link to="/" className="flex items-center gap-3">
           <img src="/icon.png" alt="icon" className="w-8 h-8 rounded-lg shadow-sm object-cover" />
           <span className="font-extrabold text-xl tracking-tight text-gray-900">
@@ -126,7 +119,13 @@ export function Sidebar({ onSelectBlog, onGenerate, isGenerating, clearSignal, o
           </span>
         </div>
 
-        <ConfigForm onGenerate={onGenerate} disabled={isGenerating} clearSignal={clearSignal} />
+        <ConfigForm 
+          onGenerate={onGenerate} 
+          disabled={isGenerating} 
+          clearSignal={clearSignal} 
+          isError={streamStatus === 'error'}
+          onResume={onResume}
+        />
       </div>
       
       <div className="flex-1 px-6 pb-6">

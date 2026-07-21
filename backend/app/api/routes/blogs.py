@@ -56,7 +56,7 @@ class BlogGenerateRequest(BaseModel):
     tone: str
     audience: str
     model_name: str
-    image_model_name: str = "pollinations-flux"
+    image_model_name: str = "@cf/stabilityai/stable-diffusion-xl-base-1.0"
     depth: str = "Standard Guide"
     reference_urls: str = ""
 
@@ -174,7 +174,7 @@ async def stream_blog(
                     "topic": gen_db_blog.topic,
                     "mode": "auto",
                     "model_name": gen_db_blog.model_name or llm_models.DEFAULT_TEXT_PROVIDER,
-                    "image_model_name": gen_db_blog.image_model_name or llm_models.IMAGE_MODEL_POLLINATIONS,
+                    "image_model_name": gen_db_blog.image_model_name or llm_models.IMAGE_MODEL_CLOUDFLARE,
                     "depth": gen_db_blog.depth or "Standard Guide",
                     "reference_urls": gen_db_blog.reference_urls or "",
                     "need_research": False,

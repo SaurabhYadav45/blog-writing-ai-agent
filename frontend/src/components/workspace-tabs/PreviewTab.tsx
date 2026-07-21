@@ -146,6 +146,8 @@ export const PreviewTab: React.FC<PreviewTabProps> = ({
                 }}
               >
                 {editableMarkdown
+                  .replace(/ — /g, ', ')
+                  .replace(/—/g, ', ')
                   .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
                   .replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$')
                   .replace(/^>\s*\[!NOTE\]/gm, '> 🔵 **Note:**')
@@ -256,7 +258,7 @@ export const PreviewTab: React.FC<PreviewTabProps> = ({
             </div>
             
             <p className="text-slate-600 text-sm mb-6">
-              Select the platform you want to publish this blog to. Make sure you have configured your CMS credentials in Settings.
+              Select the platform you want to publish this blog to. Make sure you have configured your respective credentials in Settings.
             </p>
             
             <div className="space-y-4">

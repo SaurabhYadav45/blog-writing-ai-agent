@@ -20,9 +20,12 @@ from app.core.model_registry import ModelSpec, get_model_spec
 from app.services.model_selector import create_chat_model
 from app.services.cloudinary_service import upload_image_bytes
 from app.services.agent.prompt import ROUTER_SYSTEM_PROMPT, RESEARCH_SYSTEM_PROMPT, PLANNER_SYSTEM_PROMPT, WORKER_SYSTEM_PROMPT, DECIDE_IMAGES_SYSTEM_PROMPT, EDITOR_SYSTEM_PROMPT
-from app.services.agent.state import BlogState, Task, Plan, EvidenceItem, EvidencePack, RouterDecision, ImageSpec, GlobalImagePlan, SEOMetadata, fetch_youtube_video
+from app.services.agent.state import BlogState, Task, Plan, EvidenceItem, EvidencePack, RouterDecision, ImageSpec, GlobalImagePlan, SEOMetadata
+from app.services.youtube_service import fetch_youtube_video
 
+# Get the API KEY Tavily from environment variable
 os.environ["TAVILY_API_KEY"] = settings.TAVILY_API_KEY
+
 
 def parse_structured_response(response):
     """
@@ -91,11 +94,13 @@ class JsonObjectStructuredOutput:
                 raise ValueError(f"{self.schema.__name__} JSON validation failed after retry: {content!r}") from exc
         return {"parsed": parsed, "raw": raw} if self.include_raw else parsed
 
+
 def structured_output(llm, state: dict, schema, *, include_raw: bool = False):
     """Select a structured-output mode supported by the active provider."""
     if get_model_for_task(state, expensive=False).provider_id == "deepseek":
         return JsonObjectStructuredOutput(llm, schema, include_raw)
     return llm.with_structured_output(schema, include_raw=include_raw)
+
 
 def extract_usage(raw, node_name: str, spec: ModelSpec):
     """Normalize provider usage and attach the price snapshot used for this call."""
@@ -124,6 +129,11 @@ def extract_usage(raw, node_name: str, spec: ModelSpec):
         "tier": spec.tier, "input_tokens": input_tokens, "cached_input_tokens": cached_input_tokens, "output_tokens": output_tokens,
         "total_tokens": usage.get("total_tokens", 0), "cost_usd": cost_usd,
     }
+
+
+# ====================================================================
+# Router Node: It decide if Blog needs research or not
+# ====================================================================
 
 def router_node(state: BlogState):
     """
@@ -167,6 +177,9 @@ def router_node(state: BlogState):
         "metrics": [metrics_log]
     }
 
+# ====================================================================
+# Conditional Edge Router
+# ====================================================================
 
 def route_next(state: BlogState):
     """
@@ -181,7 +194,7 @@ def route_next(state: BlogState):
 
 
 # --------------------------------------------------------------------
-# Research Node:
+# Tavily helper function for Research Node
 # --------------------------------------------------------------------
 def _tavily_search(query: str, max_results: int = 5) -> List[dict]:
     """
@@ -204,7 +217,9 @@ def _tavily_search(query: str, max_results: int = 5) -> List[dict]:
         )
     return normalized
 
-
+# ====================================================================
+# Research Node : It research about the blog title from the internet
+# ====================================================================
 
 def research_node(state: BlogState) -> dict:
     """
@@ -269,9 +284,9 @@ def research_node(state: BlogState) -> dict:
     return {"evidence": list(dedup.values())}
 
 
-# ---------------------------------------------------------------------
-# Orchestrator Node
-# ---------------------------------------------------------------------
+# ====================================================================
+# Orchestrator Node: It generates a detailed Plan for the Blog
+# ====================================================================
 
 def orchestrator_node(state: BlogState):
     """
@@ -315,9 +330,10 @@ def orchestrator_node(state: BlogState):
     return {"plan": plan, "metrics": [metrics_log]}
 
 
-# ---------------------------------------------------------------------
+# ====================================================================
 # Fanout Node: Splits the blog plan tasks to be executed concurrently
-# ---------------------------------------------------------------------
+# ====================================================================
+
 def fanout(state: BlogState):
     """
     Orchestrates the dynamic parallel execution map.
@@ -347,9 +363,9 @@ def fanout(state: BlogState):
     return sends
 
 
-# ---------------------------------------------------------------------
-# Worker Node: Generates the content of a single section
-# ---------------------------------------------------------------------
+# ====================================================================
+# Worker Node: Each worker instance will generate a particular section of the blog
+# ====================================================================
 
 def worker_node(payload: dict) -> dict:
     """
@@ -413,12 +429,17 @@ def worker_node(payload: dict) -> dict:
     elif not isinstance(content, str):
         content = str(content)
 
+    # Post-process: Replace unicode em-dashes (—) which make content look obviously AI-generated
+    content = content.replace(" — ", ", ")
+    content = content.replace("—", ", ")
+
     return {"sections": [(task.id, content.strip())], "metrics": [metrics_log]}
 
 
-# ---------------------------------------------------------------------
-# Reducer Subgraph Nodes: Merging & Images
-# ---------------------------------------------------------------------
+# ====================================================================
+# Reducer Node: Merge content generated from various sections
+# ====================================================================
+
 def merge_content(state: BlogState):
     """
     Merges section drafts completed by workers back into a unified markdown.
@@ -459,6 +480,10 @@ def merge_content(state: BlogState):
     
     return {"merged_md": merged_md, "image_specs": image_specs}
 
+
+# ====================================================================
+# Decide Images Node
+# ====================================================================
 
 def decide_images(state: BlogState) -> dict:
     """
@@ -502,6 +527,10 @@ def decide_images(state: BlogState) -> dict:
 from app.services.agent.image_service import generate_image_bytes
 
 
+# ====================================================================
+# Generate and Place images node
+# ====================================================================
+
 def generate_and_place_images(state: BlogState):
     """
     Triggers gpt-image-1 image generation based on prompts, uploads the output to
@@ -514,7 +543,7 @@ def generate_and_place_images(state: BlogState):
     if not image_specs:
         return {"final_blog": md}
 
-    image_model = state.get("image_model_name") or llm_models.IMAGE_MODEL_POLLINATIONS
+    image_model = state.get("image_model_name") or llm_models.IMAGE_MODEL_CLOUDFLARE
 
     image_count = 0
     for spec in image_specs:
@@ -578,6 +607,10 @@ def generate_and_place_images(state: BlogState):
     
     return {"final_blog": md, "metrics": [metrics_log]}
 
+
+# ====================================================================
+# Editor Node: Generate Seo metadata and insert youtube video
+# ====================================================================
 
 def editor_node(state: BlogState):
     """

@@ -17,7 +17,7 @@ from google.auth.transport import requests as google_requests
 
 from app.core.db import get_session
 from app.core.security import create_access_token, get_password_hash, verify_password, create_password_reset_token, verify_password_reset_token
-from app.core.email import send_reset_password_email, send_otp_email, send_welcome_email
+from app.services.email_service import send_reset_password_email, send_otp_email, send_welcome_email
 from app.models.user import User, UserCreate, UserPublic
 from app.core.config import settings
 

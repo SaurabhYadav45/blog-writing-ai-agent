@@ -139,7 +139,7 @@ def get_user_dashboard(current_user: User = Depends(get_current_user), session: 
     time_saved_hours = total_blogs_generated * 3
     avg_words = int(total_words / completed_blogs_count) if completed_blogs_count > 0 else 0
     
-    total_credits_capacity = max(current_user.credits, 50 if current_user.plan_name == "Pro" else 1)
+    total_credits_capacity = 20 if current_user.plan_name == "Pro" else 1
     
     return {
         "current_plan": current_user.plan_name,

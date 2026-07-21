@@ -44,7 +44,8 @@ async def lifespan(app: FastAPI):
         
         sanitized_url = db_url.replace("postgresql+asyncpg://", "postgresql://")
         
-        app.state.pool = AsyncConnectionPool(conninfo=sanitized_url, max_size=10, open=True, kwargs={"autocommit": True})
+        app.state.pool = AsyncConnectionPool(conninfo=sanitized_url, max_size=10, open=False, kwargs={"autocommit": True})
+        await app.state.pool.open()
         memory = AsyncPostgresSaver(app.state.pool)
         await memory.setup()
         app.state.agent_graph = builder.compile(checkpointer=memory)

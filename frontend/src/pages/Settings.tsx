@@ -153,7 +153,7 @@ export const Settings = () => {
             amount: orderData.amount,
             currency: orderData.currency,
             name: "BlogFusion",
-            description: "Upgrade to Pro Plan (50 Credits)",
+            description: "Upgrade to Pro Plan (20 Credits)",
             order_id: orderData.id,
             handler: async function (response: any) {
                 const verifyRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/payments/verify-payment`, {
@@ -184,17 +184,22 @@ export const Settings = () => {
             },
             theme: {
                 color: "#f97316"
+            },
+            modal: {
+                ondismiss: function() {
+                    setIsUpgrading(false);
+                }
             }
         };
 
         const paymentObject = new window.Razorpay(options);
         paymentObject.on('payment.failed', function (response: any){
             setMessage({ type: 'error', text: response.error.description || 'Payment failed' });
+            setIsUpgrading(false);
         });
         paymentObject.open();
     } catch (err: any) {
         setMessage({ type: 'error', text: err.message });
-    } finally {
         setIsUpgrading(false);
     }
   };
@@ -291,19 +296,17 @@ export const Settings = () => {
 
     currentY += 20;
     doc.setFont('helvetica', 'normal');
-    doc.text('Pro Plan Upgrade (1 Month)', 25, currentY);
-    doc.text(`INR ${(tx.amount / 100).toFixed(2)}`, pageWidth - 25, currentY, { align: 'right' });
-
-    currentY += 10;
-    doc.setDrawColor(226, 232, 240); 
-    doc.line(20, currentY, pageWidth - 20, currentY);
+    doc.text('Pro Plan Monthly Subscription', 25, currentY);
+    doc.text(` ${(tx.currency || 'INR').toUpperCase()} ${(tx.amount / 100).toFixed(2)}`, pageWidth - 25, currentY, { align: 'right' });
 
     currentY += 15;
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.setTextColor(...primaryColor);
-    doc.text('Total Paid:', pageWidth - 70, currentY, { align: 'right' });
-    doc.text(`INR ${(tx.amount / 100).toFixed(2)}`, pageWidth - 25, currentY, { align: 'right' });
+    doc.setDrawColor(200, 200, 200);
+    doc.line(25, currentY, pageWidth - 25, currentY);
+    currentY += 10;
+    
+    doc.setFont("helvetica", "bold");
+    doc.text('Total Paid:', 25, currentY);
+    doc.text(` ${(tx.currency || 'INR').toUpperCase()} ${(tx.amount / 100).toFixed(2)}`, pageWidth - 25, currentY, { align: 'right' });
 
     currentY += 8;
     doc.setFont('helvetica', 'normal');
@@ -319,13 +322,16 @@ export const Settings = () => {
     doc.save(`receipt_${tx.razorpay_payment_id}.pdf`);
   };
 
+  const hasTriggeredUpgrade = React.useRef(false);
+
   useEffect(() => {
     const queryParams = new URLSearchParams(location.search);
     const shouldUpgrade = queryParams.get('upgrade') === 'true';
-    if (shouldUpgrade && user && user.plan_name === 'Free' && !isUpgrading && !isLoading) {
+    if (shouldUpgrade && user && user.plan_name === 'Free' && !isUpgrading && !isLoading && !hasTriggeredUpgrade.current) {
+      hasTriggeredUpgrade.current = true;
       handleUpgrade();
     }
-  }, [location.search, user, isLoading]);
+  }, [location.search, user, isLoading, isUpgrading]);
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-[#FFFAF3]">

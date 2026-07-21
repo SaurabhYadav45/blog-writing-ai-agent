@@ -70,19 +70,20 @@ export const PricingSection = () => {
           >
             <div className="absolute top-0 left-0 right-0 h-48 bg-gradient-to-b from-[#f5eeff] to-white pointer-events-none"></div>
             <div className="p-8 relative z-10 flex-1 flex flex-col items-center">
-              <h3 className="text-2xl font-bold text-slate-800 mb-4">Free</h3>
+              <h3 className="text-2xl font-bold text-slate-800 mb-4">Free Starter</h3>
               <div className="flex items-baseline justify-center gap-1 mb-6">
-                <span className="text-5xl font-extrabold text-slate-800">$0</span>
-                <span className="text-slate-500 font-medium">/m</span>
+                <span className="text-5xl font-extrabold text-slate-800">₹0</span>
+                <span className="text-slate-500 font-medium">/mo</span>
               </div>
               <ul className="space-y-3 mb-8 text-left w-full max-w-[260px] flex-1">
                 {[
-                  { text: "3 AI Blogs per month", included: true },
-                  { text: "GPT model", included: true },
-                  { text: "Basic web research", included: true },
-                  { text: "Claude access", included: false },
-                  { text: "Custom Image Generation", included: false },
-                  { text: "Priority Support", included: false },
+                  { text: "1 Generation Credit", included: true },
+                  { text: "Basic LLM Models", included: true },
+                  { text: "Standard Generation Speed", included: true },
+                  { text: "Editor and Preview Tab", included: true },
+                  { text: "Logs and Metrics tabs", included: true },
+                  { text: "SEO optimization", included: true },
+                  { text: "Premium LLM Models", included: false },
                 ].map((item, i) => (
                   <li key={i} className={`flex items-center gap-3 text-[15px] ${item.included ? 'text-slate-600' : 'text-slate-400 opacity-60'}`}>
                     {item.included ? <Check className="w-5 h-5 text-emerald-500 shrink-0" /> : <X className="w-5 h-5 text-red-400 shrink-0" />}
@@ -112,19 +113,20 @@ export const PricingSection = () => {
             <div className="bg-white rounded-[24px] shadow-xl shadow-orange-500/10 border border-orange-100 overflow-hidden relative flex flex-col text-center h-full transition-all duration-300 hover:shadow-2xl hover:shadow-orange-500/15">
               <div className="absolute top-0 left-0 right-0 h-48 bg-gradient-to-b from-[#ffeedb] to-white pointer-events-none"></div>
               <div className="p-8 relative z-10 flex-1 flex flex-col items-center">
-                <h3 className="text-2xl font-bold text-[#8b3a1a] mb-4">Premium</h3>
+                <h3 className="text-2xl font-bold text-[#8b3a1a] mb-4">Pro Professional</h3>
                 <div className="flex items-baseline justify-center gap-1 mb-6">
-                  <span className="text-5xl font-extrabold text-[#8b3a1a]">$5</span>
-                  <span className="text-slate-500 font-medium">/m</span>
+                  <span className="text-5xl font-extrabold text-[#8b3a1a]">₹199</span>
+                  <span className="text-slate-500 font-medium">/mo</span>
                 </div>
                 <ul className="space-y-3 mb-8 text-left w-full max-w-[260px] flex-1">
                   {[
-                    { text: "Unlimited AI Blogs", included: true },
-                    { text: "GPT model", included: true },
-                    { text: "Deep web research", included: true },
-                    { text: "Claude access", included: true },
-                    { text: "Custom Image Generation", included: true },
-                    { text: "Priority Support", included: true },
+                    { text: "20 Generation Credits", included: true },
+                    { text: "Blog Section Regeneration", included: true },
+                    { text: "Premium LLM Models", included: true },
+                    { text: "High-Resolution Image Models", included: true },
+                    { text: "Auto Publish Feautre", included: true },
+                    { text: "Premium Support", included: true },
+                    { text: "Everything in Free Tier", included: true },
                   ].map((item, i) => (
                     <li key={i} className={`flex items-center gap-3 text-[15px] ${item.included ? 'text-slate-700' : 'text-slate-400 opacity-60'}`}>
                       {item.included ? <Check className="w-5 h-5 text-emerald-500 shrink-0" /> : <X className="w-5 h-5 text-red-400 shrink-0" />}
