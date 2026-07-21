@@ -15,6 +15,12 @@ BlogFusion AI is an advanced, multi-agent AI application designed to autonomousl
 - **Subscription & Payment System**: Built-in Razorpay integration for handling user credits and Pro plan subscriptions.
 - **Google OAuth Authentication**: Secure and fast login capabilities alongside standard JWT authentication.
 
+## 🧠 Architecture
+
+BlogFusion AI uses a state-machine based multi-agent architecture built with LangGraph. When a user provides a topic, the workflow dynamically determines if web research is required. It then creates a structured plan using an Orchestrator Node, and spawns parallel Worker Nodes to draft individual sections concurrently. Finally, the system automatically inserts AI-generated images, polishes SEO metadata, and embeds relevant YouTube tutorials before rendering the final Markdown preview.
+
+![System Architecture](assets/architecture.png)
+
 ## 🛠️ Tech Stack
 
 ### Frontend
