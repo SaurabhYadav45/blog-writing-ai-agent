@@ -4,7 +4,7 @@ import { Loader2, Send, X, Globe } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
-import rehypeSanitize from 'rehype-sanitize';
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
@@ -77,7 +77,18 @@ export const PreviewTab: React.FC<PreviewTabProps> = ({
             <article className="prose prose-sm md:prose-base lg:prose-lg prose-slate max-w-none prose-headings:font-extrabold prose-a:text-orange-500 prose-img:rounded-xl prose-img:shadow-md prose-table:border prose-table:border-slate-200 prose-th:bg-slate-50 prose-td:p-3 prose-th:p-3 prose-tr:border-b prose-tr:border-slate-100 prose-blockquote:border-l-4 prose-blockquote:border-orange-400 prose-blockquote:bg-orange-50/50 prose-blockquote:py-2 prose-blockquote:px-4 prose-blockquote:rounded-r-lg prose-blockquote:not-italic">
               <ReactMarkdown 
                 remarkPlugins={[remarkGfm, remarkMath]} 
-                rehypePlugins={[rehypeRaw, rehypeSanitize, rehypeKatex]}
+                rehypePlugins={[
+                  rehypeRaw, 
+                  [rehypeSanitize, {
+                    ...defaultSchema,
+                    tagNames: [...(defaultSchema.tagNames || []), 'iframe'],
+                    attributes: {
+                      ...defaultSchema.attributes,
+                      iframe: ['src', 'width', 'height', 'allow', 'allowFullScreen', 'frameBorder', 'style', 'loading', 'className']
+                    }
+                  }], 
+                  rehypeKatex
+                ]}
                 components={{
                   h2({ node: _node, children, ...props }: any) {
                     const text = String(children).replace(/[*_~`]/g, '');
