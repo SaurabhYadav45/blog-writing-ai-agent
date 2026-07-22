@@ -213,7 +213,7 @@ export const PreviewTab: React.FC<PreviewTabProps> = ({
           </div>
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-4 min-h-[400px]">
+        <div className="w-full flex flex-col items-center justify-center h-full text-slate-400 space-y-4 min-h-[400px] text-center px-4">
           {streamStatus === 'error' ? (
             <>
               <div className="w-20 h-20 rounded-full bg-red-50 flex items-center justify-center border border-red-100 mb-2">

@@ -37,14 +37,14 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
       <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight mb-6">Blog Generation History</h2>
       
       {loadingHistory ? (
-        <div className="flex flex-col items-center justify-center h-64 text-slate-400 space-y-4">
+        <div className="w-full flex flex-col items-center justify-center h-64 text-slate-400 space-y-4 text-center px-4">
            <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center">
             <Loader2 className="w-8 h-8 opacity-20 animate-spin" />
           </div>
           <p className="font-medium">Loading history...</p>
         </div>
       ) : historyBlogs.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-64 text-slate-400">
+        <div className="w-full flex flex-col items-center justify-center h-64 text-slate-400 text-center px-4">
           <p className="font-medium">No blogs generated yet.</p>
         </div>
       ) : (

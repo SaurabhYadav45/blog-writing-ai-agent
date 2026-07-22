@@ -22,7 +22,7 @@ export const EvidenceTab: React.FC<EvidenceTabProps> = ({ evidence }) => {
           ))}
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-4">
+        <div className="w-full flex flex-col items-center justify-center h-full text-slate-400 space-y-4 min-h-[400px] text-center px-4">
            <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center">
             <Loader2 className="w-8 h-8 opacity-20" />
           </div>

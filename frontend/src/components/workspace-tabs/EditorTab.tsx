@@ -187,7 +187,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
           </div>
         </>
       ) : (
-        <div className="w-full flex flex-col items-center justify-center h-full text-slate-400 space-y-4 min-h-[400px]">
+        <div className="w-full flex flex-col items-center justify-center h-full text-slate-400 space-y-4 min-h-[400px] text-center px-4">
           <div className="w-20 h-20 rounded-full bg-slate-50 flex items-center justify-center border border-slate-100 mb-2">
              <img src="/icon.png" alt="icon" className="w-10 h-10 opacity-30 grayscale" />
           </div>
