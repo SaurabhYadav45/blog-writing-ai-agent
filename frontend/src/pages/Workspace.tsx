@@ -302,7 +302,10 @@ export const Workspace = () => {
             onGenerate={handleGenerate} 
             isGenerating={isGenerating}
             clearSignal={clearSignal}
-            onViewFullHistory={() => setActiveTab('History')}
+            onViewFullHistory={() => {
+              setActiveTab('History');
+              setIsMobileMenuOpen(false);
+            }}
             streamStatus={streamStatus}
             onResume={() => selectedBlogId && handleResume(selectedBlogId)}
           />
