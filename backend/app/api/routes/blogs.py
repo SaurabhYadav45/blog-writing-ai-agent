@@ -200,7 +200,39 @@ async def stream_blog(
                 current_metrics = []
                 
                 # Checkpoint configuration for LangGraph state persistence
-                config = {"configurable": {"thread_id": str(blog_id)}}
+                # config = {"configurable": {"thread_id": str(blog_id)}}
+
+                config = {
+                    "configurable": {
+                        "thread_id": str(blog_id)
+                    },
+                    "metadata": {
+                        # --- User Context ---
+                        "user_id": str(current_user.id),
+                        "user_email": current_user.email,
+                        "user_plan": current_user.plan_name,  # e.g., "Free", "Pro", "Enterprise"
+                        "credits_remaining": current_user.credits,
+
+                        # --- Blog Generation Parameters ---
+                        "blog_id": str(blog_id),
+                        "topic": gen_db_blog.topic,
+                        "depth": gen_db_blog.depth or "Standard Guide",  # e.g. "Quick Overview", "Deep Dive"
+                        "target_audience": gen_db_blog.target_audience,
+                        "tone": gen_db_blog.tone,
+
+                        # --- AI Model Selections ---
+                        "llm_text_model": gen_db_blog.model_name or llm_models.DEFAULT_TEXT_PROVIDER,
+                        "image_model": gen_db_blog.image_model_name or llm_models.IMAGE_MODEL_CLOUDFLARE,
+                        "brand_persona": current_user.brand_persona or "Default",
+                    },
+                    "tags": [
+                        "blog-generation",                                      # Feature category
+                        f"plan:{current_user.plan_name}",                      # User tier tag (e.g. plan:Pro)
+                        f"model:{gen_db_blog.model_name}",                     # LLM model tag (e.g. model:deepseek-chat)
+                        f"depth:{gen_db_blog.depth}",                          # Research depth tag
+                        "resumed-execution" if current_state_info.next else "initial-run", # Recovery state
+                    ]
+                }
                 graph = request.app.state.agent_graph
                 current_state_info = await graph.aget_state(config)
                 

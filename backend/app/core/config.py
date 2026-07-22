@@ -70,5 +70,11 @@ class Settings(BaseSettings):
         extra="ignore"
     )
 
+    # LangSmith Config:
+    LANGCHAIN_TRACING_V2: str = "true"
+    LANGCHAIN_API_KEY: str = ""
+    LANGCHAIN_PROJECT: str = "blog-writing-ai-agent"
+    LANGCHAIN_ENDPOINT: str = "https://api.smith.langchain.com"
+
 # Global settings instance to import and use across the backend
 settings = Settings()

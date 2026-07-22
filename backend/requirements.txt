@@ -2,6 +2,7 @@ fastapi[all]
 sqlmodel
 psycopg2-binary
 langgraph
+langsmith
 langchain-openai
 langchain-anthropic
 langchain-google-genai
