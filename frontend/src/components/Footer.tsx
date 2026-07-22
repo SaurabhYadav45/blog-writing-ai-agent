@@ -30,7 +30,7 @@ export const Footer = () => {
       }}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 lg:gap-12">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 lg:gap-12">
           
           {/* Brand Column */}
           <div className="lg:col-span-2 flex flex-col">
@@ -40,36 +40,38 @@ export const Footer = () => {
                 BlogFusion
               </span>
             </Link>
-            <p className="text-slate-500 font-light text-sm mb-8 max-w-xs leading-relaxed">
+            <p className="text-slate-500 font-light text-sm mb-8 max-w-xs sm:max-w-md lg:max-w-xs leading-relaxed">
               The next generation of AI writing. Create high-quality, production-ready technical blogs using autonomous AI agents that research, plan, and draft content live.
             </p>
-            <h2 className="text-5xl sm:text-6xl font-bold text-slate-400/20 tracking-tight mt-auto">
+            <h2 className="text-5xl sm:text-6xl font-bold text-slate-400/20 tracking-tight mt-auto hidden sm:block lg:block">
               BlogFusion
             </h2>
           </div>
 
-          {/* Links Columns */}
-          <div className="flex flex-col gap-4">
-            <h3 className="font-bold text-slate-900 mb-2">Product</h3>
-            <a href="/#features" className="text-sm text-slate-500 hover:text-[#FF4500] transition-colors">Features</a>
-            <a href="/#how-it-works" className="text-sm text-slate-500 hover:text-[#FF4500] transition-colors">How it Works</a>
-            <a href="/#pricing" className="text-sm text-slate-500 hover:text-[#FF4500] transition-colors">Pricing</a>
-            <Link to="/login" className="text-sm text-slate-500 hover:text-[#FF4500] transition-colors">Get Started</Link>
-          </div>
+          {/* Links Columns: 2 cols on mobile (Product & Resources top row, Legal bottom row), 3 cols in 1 single row on tab and desktop */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:col-span-3 gap-8 sm:gap-10 lg:gap-12">
+            <div className="flex flex-col gap-4">
+              <h3 className="font-bold text-slate-900 mb-2">Product</h3>
+              <a href="/#features" className="text-sm text-slate-500 hover:text-[#FF4500] transition-colors">Features</a>
+              <a href="/#how-it-works" className="text-sm text-slate-500 hover:text-[#FF4500] transition-colors">How it Works</a>
+              <a href="/#pricing" className="text-sm text-slate-500 hover:text-[#FF4500] transition-colors">Pricing</a>
+              <Link to="/login" className="text-sm text-slate-500 hover:text-[#FF4500] transition-colors">Get Started</Link>
+            </div>
 
-          <div className="flex flex-col gap-4">
-            <h3 className="font-bold text-slate-900 mb-2">Resources</h3>
-            <Link to="/contact" className="text-sm text-slate-500 hover:text-[#FF4500] transition-colors">Contact Support</Link>
-            <Link to="/feedback" className="text-sm text-slate-500 hover:text-[#FF4500] transition-colors">Leave Feedback</Link>
-            <Link to="/docs" className="text-sm text-slate-500 hover:text-[#FF4500] transition-colors">Documentation</Link>
-            <Link to="/blog" className="text-sm text-slate-500 hover:text-[#FF4500] transition-colors">Blog</Link>
-          </div>
+            <div className="flex flex-col gap-4">
+              <h3 className="font-bold text-slate-900 mb-2">Resources</h3>
+              <Link to="/contact" className="text-sm text-slate-500 hover:text-[#FF4500] transition-colors">Contact Support</Link>
+              <Link to="/feedback" className="text-sm text-slate-500 hover:text-[#FF4500] transition-colors">Leave Feedback</Link>
+              <Link to="/docs" className="text-sm text-slate-500 hover:text-[#FF4500] transition-colors">Documentation</Link>
+              <Link to="/blog" className="text-sm text-slate-500 hover:text-[#FF4500] transition-colors">Blog</Link>
+            </div>
 
-          <div className="flex flex-col gap-4">
-            <h3 className="font-bold text-slate-900 mb-2">Legal</h3>
-            <Link to="/privacy" className="text-sm text-slate-500 hover:text-[#FF4500] transition-colors">Privacy Policy</Link>
-            <Link to="/terms" className="text-sm text-slate-500 hover:text-[#FF4500] transition-colors">Terms of Service</Link>
-            <Link to="/cookies" className="text-sm text-slate-500 hover:text-[#FF4500] transition-colors">Cookie Policy</Link>
+            <div className="flex flex-col gap-4 col-span-2 md:col-span-1">
+              <h3 className="font-bold text-slate-900 mb-2">Legal</h3>
+              <Link to="/privacy" className="text-sm text-slate-500 hover:text-[#FF4500] transition-colors">Privacy Policy</Link>
+              <Link to="/terms" className="text-sm text-slate-500 hover:text-[#FF4500] transition-colors">Terms of Service</Link>
+              <Link to="/cookies" className="text-sm text-slate-500 hover:text-[#FF4500] transition-colors">Cookie Policy</Link>
+            </div>
           </div>
 
         </div>

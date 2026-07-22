@@ -15,6 +15,7 @@ import { Menu, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLocation } from 'react-router-dom';
 import { getBlogById, generateBlog, getStreamUrl } from '../services/blogs';
+import { UserProfileDropdown } from '../components/UserProfileDropdown';
 export const Workspace = () => {
   // Currently viewed blog ID
   const [selectedBlogId, setSelectedBlogId] = useState<number | null>(null);
@@ -272,16 +273,15 @@ export const Workspace = () => {
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-screen w-full overflow-hidden bg-orange-50 relative workspace-font">
+    <div className="flex flex-col md:flex-row h-[100dvh] w-full overflow-hidden bg-orange-50 relative workspace-font">
       {/* Mobile Header Bar */}
       <div className="md:hidden flex items-center justify-between p-4 bg-white/80 backdrop-blur-xl border-b border-orange-100 z-50">
          <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-gradient-to-br from-orange-400 to-orange-600 rounded-lg shadow-sm">
-              <span className="text-white font-bold text-xs">BF</span>
-            </div>
+            <img src="/icon.png" alt="icon" className="w-8 h-8 rounded-lg shadow-sm object-cover" />
             <span className="font-extrabold text-slate-800 tracking-tight">BlogFusion</span>
          </div>
          <div className="flex items-center gap-2">
+           <UserProfileDropdown />
            <button 
              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} 
              className="p-2 bg-white rounded-md shadow-sm border border-orange-100 text-orange-600 hover:bg-orange-50 transition-colors"

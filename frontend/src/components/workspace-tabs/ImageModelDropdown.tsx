@@ -47,7 +47,7 @@ export const ImageModelDropdown: React.FC<ImageModelDropdownProps> = ({ selected
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.95 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden"
+            className="absolute left-0 md:right-0 md:left-auto mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden"
           >
             <div className="p-1.5 space-y-1">
               {IMAGE_MODELS.map(model => (

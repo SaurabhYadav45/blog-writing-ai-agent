@@ -59,14 +59,14 @@ export const PricingSection = () => {
           </p>
         </motion.div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16 max-w-[850px] mx-auto mt-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12 max-w-4xl mx-auto mt-12 px-4 sm:px-0">
           {/* Free Tier */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
             viewport={{ once: true }}
-            className="bg-white rounded-[24px] shadow-sm border border-gray-100 overflow-hidden relative flex flex-col text-center transition-all duration-300 hover:shadow-md"
+            className="bg-white rounded-[24px] shadow-sm border border-gray-100 overflow-hidden relative flex flex-col text-center transition-all duration-300 hover:shadow-md max-w-sm sm:max-w-md md:max-w-none w-full mx-auto"
           >
             <div className="absolute top-0 left-0 right-0 h-48 bg-gradient-to-b from-[#f5eeff] to-white pointer-events-none"></div>
             <div className="p-8 relative z-10 flex-1 flex flex-col items-center">
@@ -103,7 +103,7 @@ export const PricingSection = () => {
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.2 }}
             viewport={{ once: true }}
-            className="relative mt-8 lg:mt-0"
+            className="relative mt-8 md:mt-0 max-w-sm sm:max-w-md md:max-w-none w-full mx-auto flex flex-col"
           >
             {/* Badge positioned outside the card bounds */}
             <div className="absolute -top-[16px] left-1/2 -translate-x-1/2 bg-gradient-to-r from-orange-200 to-orange-100 text-[#a0451e] text-sm font-bold px-5 py-1.5 rounded-full shadow-sm flex items-center gap-1.5 z-20 border border-orange-200">

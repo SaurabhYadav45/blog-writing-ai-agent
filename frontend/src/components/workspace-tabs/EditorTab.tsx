@@ -65,8 +65,8 @@ export const EditorTab: React.FC<EditorTabProps> = ({
         <>
           {/* Main Editor Section */}
           <div className="w-full md:w-2/3 flex flex-col relative border-r border-slate-100">
-            <div className="bg-slate-100 p-2 rounded-tl-xl border-b border-slate-200 flex justify-between items-center sticky top-0 z-10">
-               <span className="text-xs font-bold text-slate-600 uppercase tracking-wider pl-2">Raw Markdown Editor</span>
+            <div className="bg-slate-100 p-3 sm:p-2 rounded-tl-xl border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0 sticky top-0 z-10">
+               <span className="text-xs font-bold text-slate-600 uppercase tracking-wider pl-0 sm:pl-2">Raw Markdown Editor</span>
                <div className="flex items-center gap-3">
                  <span className="hidden lg:flex text-[11px] font-medium text-amber-700 bg-amber-100/50 px-2.5 py-1 rounded-md border border-amber-200 shadow-sm items-center gap-1.5">
                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>

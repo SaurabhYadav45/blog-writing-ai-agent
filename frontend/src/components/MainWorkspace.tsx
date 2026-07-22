@@ -384,7 +384,7 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col h-screen overflow-hidden">
+    <div className="flex-1 flex flex-col h-full overflow-hidden">
       {/* Narrow Header */}
       <header className="glass-panel border-b-0 rounded-b-xl md:rounded-b-2xl pt-4 md:pt-6 pb-4 md:pb-5 px-4 md:px-10 flex-shrink-0 relative z-10 shadow-sm">
         <div className="absolute top-0 right-0 -mr-10 md:-mr-20 -mt-10 md:-mt-20 w-32 md:w-48 h-32 md:h-48 bg-orange-400/20 rounded-full blur-2xl"></div>
@@ -413,7 +413,9 @@ export const MainWorkspace: React.FC<MainWorkspaceProps> = ({
             <div className="h-4 w-px bg-slate-200"></div>
 
             {/* User Profile Dropdown */}
-            <UserProfileDropdown />
+            <div className="hidden md:block">
+              <UserProfileDropdown />
+            </div>
           </div>
         </div>
       </header>
