@@ -75,18 +75,20 @@ export const Dashboard = () => {
           <motion.div 
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-red-50 border border-red-200 p-4 rounded-2xl shadow-sm flex items-start gap-4"
+            className="bg-red-50 border border-red-200 p-4 sm:p-5 rounded-2xl shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-4"
           >
-            <div className="bg-red-100 p-2 rounded-full text-red-600 mt-0.5">
-              <AlertTriangle size={20} />
-            </div>
-            <div>
-              <h3 className="text-red-800 font-bold">You are running low on credits!</h3>
-              <p className="text-red-600 text-sm mt-1">You only have {stats?.remaining_credits} credits left. Upgrade to our Pro plan to continue generating high-quality blogs without interruption.</p>
+            <div className="flex items-start gap-3 flex-1">
+              <div className="bg-red-100 p-2 rounded-full text-red-600 shrink-0 mt-0.5">
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <h3 className="text-red-800 font-bold text-sm sm:text-base">You are running low on credits!</h3>
+                <p className="text-red-600 text-xs sm:text-sm mt-1">You only have {stats?.remaining_credits} credits left. Upgrade to our Pro plan to continue generating high-quality blogs without interruption.</p>
+              </div>
             </div>
             <button 
               onClick={() => navigate('/settings?upgrade=true')}
-              className="ml-auto flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-orange-400 to-orange-500 text-white text-sm font-bold rounded-xl hover:from-orange-500 hover:to-orange-600 transition-all shadow-md shadow-orange-500/20 whitespace-nowrap cursor-pointer"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-orange-400 to-orange-500 text-white text-sm font-bold rounded-xl hover:from-orange-500 hover:to-orange-600 transition-all shadow-md shadow-orange-500/20 whitespace-nowrap cursor-pointer mt-2 sm:mt-0 shrink-0"
             >
               <Crown className="w-4 h-4 fill-white" />
               Upgrade Now

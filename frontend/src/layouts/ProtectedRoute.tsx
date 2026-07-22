@@ -11,9 +11,9 @@ import { useAuth } from '../context/AuthContext';
 export const ProtectedRoute = () => {
   const { isAuthenticated } = useAuth();
 
-  // Redirect to login if user session is not found
+  // Redirect to home if user session is not found
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
   }
 
   // Render matching nested sub-route components
